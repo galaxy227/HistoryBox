@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -282,7 +283,7 @@ namespace HistoryBox
                         Id = state.Id,
                         Name = state.Name,
                         FoundingSpecies = state.Species,
-                        FirstYear = Lifecycle.Begin(year, previous)
+                        StartYear = Lifecycle.Begin(year, previous)
                     };
 
                     Kingdoms.Add(entry);
@@ -328,7 +329,7 @@ namespace HistoryBox
                         Id = state.Id,
                         Name = state.Name,
                         FoundingSpecies = state.Species,
-                        FirstYear = Lifecycle.Begin(year, previous)
+                        StartYear = Lifecycle.Begin(year, previous)
                     };
 
                     Villages.Add(entry);
@@ -437,7 +438,7 @@ namespace HistoryBox
 
                 foreach (WarInvolvement interval in kingdom.Involvement)
                 {
-                    if (interval.EndDate == null)
+                    if (interval.EndYear == null)
                     {
                         current = interval;
                     }
@@ -454,7 +455,7 @@ namespace HistoryBox
                     kingdom.Involvement.Add(new WarInvolvement
                     {
                         Side = state.Side,
-                        StartDate = Lifecycle.Begin(year, previous)
+                        StartYear = Lifecycle.Begin(year, previous)
                     });
                     changed = true;
                 }
@@ -603,8 +604,8 @@ namespace HistoryBox
         public void Trim(int year)
         {
             Ages.RemoveAll(item => Lifecycle.After(item.StartYear, year));
-            Kingdoms.RemoveAll(item => Lifecycle.After(item.FirstYear, year));
-            Villages.RemoveAll(item => Lifecycle.After(item.FirstYear, year));
+            Kingdoms.RemoveAll(item => Lifecycle.After(item.StartYear, year));
+            Villages.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Wars.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Alliances.RemoveAll(item => Lifecycle.After(item.StartYear, year));
 
@@ -612,10 +613,12 @@ namespace HistoryBox
             {
                 Lifecycle.Trim(item, year);
             }
+
             foreach (KingdomMetadata item in Kingdoms)
             {
                 Lifecycle.Trim(item, year);
             }
+
             foreach (VillageMetadata item in Villages)
             {
                 Lifecycle.Trim(item, year);
@@ -627,7 +630,8 @@ namespace HistoryBox
 
                 foreach (WarKingdomMetadata kingdom in war.Kingdoms)
                 {
-                    kingdom.Involvement.RemoveAll(item => Lifecycle.After(item.StartDate, year));
+                    kingdom.Involvement.RemoveAll(item => Lifecycle.After(item.StartYear, year));
+
                     foreach (WarInvolvement item in kingdom.Involvement)
                     {
                         Lifecycle.Trim(item, year);
@@ -644,6 +648,7 @@ namespace HistoryBox
                 foreach (AllianceKingdomMetadata kingdom in alliance.Kingdoms)
                 {
                     kingdom.Involvement.RemoveAll(item => Lifecycle.After(item.StartYear, year));
+
                     foreach (AllianceInvolvement item in kingdom.Involvement)
                     {
                         Lifecycle.Trim(item, year);
@@ -678,7 +683,7 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "founding_species", Order = 3)] public string FoundingSpecies;
-        [DataMember(Name = "first_year", Order = 4)] public object FirstYear;
+        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
         [DataMember(Name = "end_year", Order = 5)] public object EndYear;
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
@@ -689,7 +694,7 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "founding_species", Order = 3)] public string FoundingSpecies;
-        [DataMember(Name = "first_year", Order = 4)] public object FirstYear;
+        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
         [DataMember(Name = "end_year", Order = 5)] public object EndYear;
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
@@ -718,9 +723,9 @@ namespace HistoryBox
     internal sealed class WarInvolvement : IInterval
     {
         [DataMember(Name = "side", Order = 1)] public string Side;
-        [DataMember(Name = "start_date", Order = 2)] public object StartDate;
-        [DataMember(Name = "end_date", Order = 3)] public object EndDate;
-        object IInterval.End { get { return EndDate; } set { EndDate = value; } }
+        [DataMember(Name = "start_year", Order = 2)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 3)] public object EndYear;
+        object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
     [DataContract]
