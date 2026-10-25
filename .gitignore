@@ -1,0 +1,25 @@
+# Build outputs
+**/bin/
+**/obj/
+*.dll
+*.pdb
+*.mdb
+
+# IDE files
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Dependencies
+**/node_modules/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
