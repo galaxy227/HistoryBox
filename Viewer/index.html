@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>HistoryBox — Historical explorer</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="parser.js"></script>
+  <script defer src="viewer.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead"><a class="brand" href="https://github.com/galaxy227/HistoryBox" target="_blank" rel="noopener noreferrer"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--logo-light)" d="M2 4h5v5h4V4h5v5h4V4h5v5h5v21H2z"/><path fill="var(--logo-dark)" d="M7 14h4v5H7zm14 0h4v5h-4zm-8 8h6v8h-6z"/></svg>HistoryBox</a><span class="header-spacer"></span><button id="replace" hidden>Load world</button><button id="settings-button" hidden>Settings</button></header>
+  <div id="navigation-shell" class="sticky-shell" hidden>
+  <nav id="view-nav" aria-label="Main navigation" hidden><a href="#/overview">World overview</a><a href="#/browser/kingdoms">Entity browser</a><span class="nav-world" id="nav-world"></span></nav>
+  <div id="entity-manager" hidden></div>
+  </div>
+  <div id="timeline-shell" class="timeline-shell" hidden>
+  <section id="context" class="context" aria-label="Historical context" hidden>
+    <strong id="year-label">Year —</strong>
+    <button id="play" aria-label="Play history" aria-pressed="false">▶</button>
+    <select id="speed" aria-label="Playback speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+    <button id="previous" aria-label="Previous recorded year">←</button>
+    <input id="year" type="range" aria-label="Selected recorded year">
+    <button id="next" aria-label="Next recorded year">→</button>
+    <label>Window<select id="age"></select></label>
+    <label>Start<input id="window-start" type="number" min="0" step="1" aria-label="Window start year"></label>
+    <label>End<input id="window-end" type="number" min="0" step="1" aria-label="Window end year"></label>
+    <small id="range-label"></small>
+  </section>
+  </div>
+  <p id="restore-status" class="restore-status" role="status">Opening history…</p>
+  <section id="loader" class="loader" hidden>
+    <form id="load-form" class="panel load-panel">
+      <div class="load-heading"><svg class="load-emblem" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 7h24l8 8v26H8zM32 7v10h8M16 24h16M16 31h12"/></svg><div><p class="eyebrow">HistoryBox Viewer</p><h1>Load a world</h1></div></div><div class="load-files">
+      <label><span class="file-heading">World records <small>metadata.json</small></span><input id="metadata" type="file" accept=".json,application/json" required></label>
+      <label><span class="file-heading">Annual history <small>annual.jsonl</small></span><input id="annual" type="file" accept=".jsonl,.ndjson,.txt" required></label>
+      </div><button class="primary" id="load" type="submit">Open world</button>
+      <p id="load-status" role="status" aria-live="polite"></p>
+      <button id="cancel-load" type="button" hidden>Return to current world</button>
+    </form>
+  </section>
+  <main id="main" tabindex="-1" hidden></main>
+  <footer><button id="diagnostics-button" hidden>Data notes</button></footer>
+  <div id="chart-tooltip" tabindex="0" class="tooltip" role="status" hidden></div>
+  <dialog id="settings"><h2>Settings</h2><label><input id="animations" type="checkbox" checked>Animation</label><label class="trend-setting" for="trend-years">Grid card timespan <output id="trend-years-value" for="trend-years">50 years</output></label><input id="trend-years" type="range" min="10" max="100" value="50" step="1"><form method="dialog"><button id="reset-settings" type="button">Reset defaults</button><button>Close</button></form></dialog>
+  <dialog id="diagnostics"><h2>Data notes</h2><div id="diagnostics-content"></div><form method="dialog"><button>Close</button></form></dialog>
+  <div id="announcement" class="sr-only" aria-live="polite"></div>
+</body>
+</html>
