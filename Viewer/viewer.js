@@ -877,6 +877,7 @@
     if (!metadata || !annual) return;
     $('load').disabled = true; $('load-status').className = ''; $('load-status').textContent = 'Reading history…';
     try {
+      if (!saved && !/\.(jsonl|ndjson|txt)$/i.test(annual.name)) throw new Error('Annual history must be a .jsonl, .ndjson, or .txt file.');
       const metadataText = await metadata.text();
       const next = await H.parse(metadataText, annual, count => { $('load-status').textContent = `Indexed ${count.toLocaleString()} observations…`; });
       await H.prepare(next, message => { $('load-status').textContent = message; });
