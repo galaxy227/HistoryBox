@@ -11,7 +11,7 @@
   const entityColor = (type,id) => type === 'world' ? THEME['global-data'] : colors[data?.entity(type,id)?.founding_species || data?.entity(type,id)?.species] || THEME['entity-data'];
   const metricColor = metric => colors[metric] || THEME['global-data'];
   const typeLabel = type => type.charAt(0).toUpperCase() + type.slice(1);
-  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', kill_change:'Kill change', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliance memberships', army: 'Army', territory: 'Territory', houses: 'Houses', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', houses_per_resident: 'Houses / resident', attacker_deaths: 'Attacker deaths', defender_deaths: 'Defender deaths', total_deaths: 'Total deaths', change_total_deaths: 'Casualty change', change_attacker_deaths: 'Attacker casualty change', change_defender_deaths: 'Defender casualty change', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Recorded participation transitions', duration: 'Exact duration (years)', owners: 'Distinct known owners', ownership_changes: 'Observed owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Recorded owner', latest_year: 'Last casualty observation' };
+  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', kill_change:'Kill change', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliance memberships', army: 'Army', territory: 'Territory', houses: 'Houses', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', houses_per_resident: 'Houses / resident', attacker_deaths: 'Attacker casualties', defender_deaths: 'Defender casualties', total_deaths: 'Casualties', change_total_deaths: 'Casualty change', change_attacker_deaths: 'Attacker casualty change', change_defender_deaths: 'Defender casualty change', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Recorded participation transitions', duration: 'Duration', owners: 'Distinct known owners', ownership_changes: 'Observed owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Recorded owner', latest_year: 'Last casualty observation' };
   function label(metric) {
     if (metric === 'wars_observed') return 'Wars';
     if (labels[metric]) return labels[metric];
@@ -147,7 +147,7 @@
   }
   const pref = (id, initial) => preferences.has(id) ? preferences.get(id) : initial;
   function entityIcon(type) {
-    const shapes = { characters:'<circle cx="12" cy="5" r="4"/><path d="M3 23v-7c0-3 4-5 9-5s9 2 9 5v7h-5v-6h-1v6H9v-6H8v6z"/>', kingdoms: '<path d="M12 1l3.4 7 7.6 1.1-5.5 5.4 1.3 7.5-6.8-3.6-6.8 3.6 1.3-7.5L1 9.1 8.6 8z"/>', villages: '<path d="M12 1.6L24 22.4H0z"/>', wars: '<path d="M5 1l7 7 7-7 4 4-7 7 7 7-4 4-7-7-7 7-4-4 7-7-7-7z"/>', alliances: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/>' };
+    const shapes = { characters:'<circle cx="12" cy="5" r="4"/><path d="M3 23v-6c0-4 4-6 9-6s9 2 9 6v6z"/>', kingdoms: '<path d="M12 1l3.4 7 7.6 1.1-5.5 5.4 1.3 7.5-6.8-3.6-6.8 3.6 1.3-7.5L1 9.1 8.6 8z"/>', villages: '<path d="M12 1.6L24 22.4H0z"/>', wars: '<path d="M5 1l7 7 7-7 4 4-7 7 7 7-4 4-7-7-7 7-4-4 7-7-7-7z"/>', alliances: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3"/>' };
     return '<svg class="entity-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">' + (shapes[type] || '') + '</svg>';
   }
   function link(type, id, text) {
@@ -163,7 +163,7 @@
     return (n+suffix)+' '+a.name;
   }
   function ageLink(index, text) {
-    return `<a href="#" data-age="${index === null ? 'all' : index}">${esc(text ?? ageName(index))}</a>`;
+    return `<a href="#" data-tip="${esc(index === null ? `${data.years[0]} → ${data.years.at(-1)}` : `${date(data.ages[index]?.start_year)} → ${date(data.ages[index]?.end_year)}`)}" data-age="${index === null ? 'all' : index}">${esc(text ?? ageName(index))}</a>`;
   }
   function options(values, selected, labeler = label) { return values.map(v => `<option value="${esc(v)}"${String(v) === String(selected) ? ' selected' : ''}>${esc(labeler(v))}</option>`).join(''); }
   function selector(id, title, values, selected, labeler = label) { return `<label>${esc(title)}<select data-pref="${esc(id)}">${options(values, selected, labeler)}</select></label>`; }
@@ -396,7 +396,7 @@
       return compareValues(av, bv, direction) || H.compare(a.entity.id, b.entity.id);
     });
   }
-  function table(type, rows, columns, id, { limit = 25, selectable = false, selected = [] } = {}) {
+  function table(type, rows, columns, id, { limit = 100, selectable = false, selected = [] } = {}) {
     const state = tableStates.get(id) || { field: columns.includes('level') ? 'level' : columns.includes('peak_level') ? 'peak_level' : columns.includes('population') ? 'population' : 'name', direction: columns.includes('population') ? -1 : 1 };
     tableStates.set(id, state);
     rows = sorted(rows, state.field, state.direction);
@@ -422,11 +422,11 @@
 </div>` : '<div class="pagination" aria-hidden="true"></div>'}`;
   }
   function timeline(rows, id, { filter = true, sideColors = false } = {}) {
-    const query = pref(`${id}-search`, '').toLowerCase(), species = pref(`${id}-species`, ''), sort = pref(`${id}-sort`, 'start');
+    const query = pref(`${id}-search`, '').toLowerCase(), species = pref(`${id}-species`, '');
+    rows=rows.map(r=>({...r,species:r.species || (r.type ? data.entity(r.type,r.id)?.founding_species || data.entity(r.type,r.id)?.species : null)}));
     const [lo, hi] = id === 'ages' ? [data.years[0], data.years.at(-1)] : range(), pos = n => Math.max(0, Math.min(100, (n - lo) / Math.max(1, hi - lo) * 100));
-    const filtered = rows.filter(r => (!query || r.name.toLowerCase().includes(query)) && (!species || r.species === species)).sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : compareValues(H.boundary(a.intervals[0]?.start_year)?.lo, H.boundary(b.intervals[0]?.start_year)?.lo));
-    const page = Math.min(pages.get(id) || 0, Math.max(0, Math.ceil(filtered.length / 20) - 1)); pages.set(id, page);
-    const controls = filter ? `<div class="controls"><input type="search" aria-label="Filter timeline" placeholder="Filter timeline…" data-pref="${id}-search" value="${esc(pref(`${id}-search`, ''))}">${selector(`${id}-species`, 'Species', ['', ...H.SPECIES], species, v => v ? label(v) : 'All species')}${selector(`${id}-sort`, 'Sort', ['start', 'name'], sort)}</div>` : '';
+    const filtered = rows.filter(r => (!query || r.name.toLowerCase().includes(query)) && (!species || r.species === species)).sort((a, b) => compareValues(H.boundary(a.intervals[0]?.start_year)?.lo, H.boundary(b.intervals[0]?.start_year)?.lo));
+    const controls = `<div class="controls"><input type="search" aria-label="Search chronology" placeholder="Search…" data-pref="${id}-search" value="${esc(pref(`${id}-search`, ''))}">${rows.some(r=>r.species) ? selector(`${id}-species`, 'Species', ['', ...H.SPECIES], species, v => v ? label(v) : 'All species') : ''}</div>`;
     const gaps = data.gaps.filter(([a, b]) => a < hi && b > lo).map(([a, b]) => `<span class="time-gap" style="left:${pos(a)}%;width:${pos(b) - pos(a)}%" aria-label="No observations between ${a} and ${b}"></span>`).join('');
     const content = filtered.map((r, index) => {
       const trackId = id + ":" + index;
@@ -518,11 +518,11 @@
       const periodCards = { population_change: stats.population.change, period_peak_population: stats.population.peak?.value, kingdoms_observed: stats.kingdoms_observed, kingdoms_ended: stats.kingdoms_ended, villages_observed: stats.villages_observed, villages_ended: stats.villages_ended, wars_observed: stats.wars_observed, alliances_observed: stats.alliances_observed, tracked_characters: stats.tracked_characters };
       ageContent = section('Ages', `<div class="panel age-analysis">
 <h3 class="age-title">${ageLink(age, ageName(age))} <span>· ${esc(date(a.start_year))} → ${esc(date(a.end_year))}</span></h3>${stats.years.length ? staticSummary(periodCards, [['Population', ['population_change','period_peak_population']], ['Civilizations', ['kingdoms_observed','kingdoms_ended','villages_observed','villages_ended']], ['History', ['wars_observed','alliances_observed','tracked_characters']]]) : '<p class="warning">No recorded observation can confidently be assigned to this age.</p>'}
-<div class="age-timeline"><h3>Historical ages</h3>${timeline(data.ages.map((a, i) => ({ name: `${ageName(data.ages.indexOf(a))}`, intervals: [a], id: i })), 'ages', { filter: false })}</div>
+
 </div>`);
     }
     const observationMetric = worldMetrics.includes(pref('world-observations-metric','army')) ? pref('world-observations-metric','army') : 'army';
-    const observations = panel('Historical observations',chart([{name:label(observationMetric),points:worldSeries(observationMetric)}],observationMetric),selector('world-observations-metric','Measure',worldMetrics,observationMetric));
+    const observations = panel('Historical observations',chart([{name:'Global',points:worldSeries(observationMetric)}],observationMetric),selector('world-observations-metric','Measure',worldMetrics,observationMetric));
     return `<div class="page-head">
 <div>
 
@@ -530,14 +530,14 @@
 
 </div>
 
-</div>${year === null ? '<p class="warning">Selected age has no confident observations. Snapshot values are unavailable.</p>' : ''}${section('World snapshot', snapshotCards(snapshot, 'world', '', previous, previousYear))}${ageContent}${section('World statistics', `<div class="grid">${demographics('world', '', 'world-species')}${observations}</div>`)}${section('Chronology', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t => panel(typeLabel(t),timeline(data.catalog(t).map(e=>({name:e.name || `#${e.id}`,id:e.id,type:t,species:e.founding_species||e.species,intervals:[e]})),`life-${t}`,{filter:t==='kingdoms'||t==='villages'}))).join('')}</div>`)}${section('Rankings', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t=>{const choices=standardMetrics(t),metric=choices.includes(pref(`ranking-${t}`,choices[0]))?pref(`ranking-${t}`,choices[0]):choices[0];return panel(typeLabel(t),`<p class="ranking-year">Year ${year ?? '—'}</p>${rankings(t,metric)}`,selector(`ranking-${t}`,'Measure',choices,metric));}).join('')}</div>`)}${section('Historical milestones', `<div class="panel">${events()}</div>`)}`;
+</div>${year === null ? '<p class="warning">Selected age has no confident observations. Snapshot values are unavailable.</p>' : ''}${section('Snapshot', snapshotCards(snapshot, 'world', '', previous, previousYear))}${ageContent}${section('Statistics', `<div class="grid">${demographics('world', '', 'world-species')}${observations}</div>`)}${section('Chronology', `<div class="grid">${panel('Ages',timeline(data.ages.map((a,i)=>({name:ageName(i),intervals:[a],id:i})), 'ages'))}${['kingdoms','villages','wars','alliances'].map(t => panel(typeLabel(t),timeline(data.catalog(t).map(e=>({name:e.name || `#${e.id}`,id:e.id,type:t,species:e.founding_species||e.species,intervals:[e]})),`life-${t}`,{filter:t==='kingdoms'||t==='villages'}))).join('')}</div>`)}${section('Rankings', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t=>{const choices=standardMetrics(t),metric=choices.includes(pref(`ranking-${t}`,choices[0]))?pref(`ranking-${t}`,choices[0]):choices[0];return panel(typeLabel(t),`<p class="ranking-year">Year ${year ?? '—'}</p>${rankings(t,metric)}`,selector(`ranking-${t}`,'Measure',choices,metric));}).join('')}</div>`)}${section('Historical milestones', `<div class="panel">${events()}</div>`)}`;
   }
   const populationMetrics = ['population',...H.SPECIES];
   const commonMetrics = [...populationMetrics, 'army', 'territory', 'houses', 'food', 'coins', 'population_share', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'houses_per_resident'];
   const warMetrics = ['total_deaths','attacker_deaths','defender_deaths','attackers','defenders'];
   const standardMetrics = type => type === 'characters' ? ['level','coins','kills'] : [...commonMetrics, 'tracked_characters', ...(type === 'villages' ? ['loyalty'] : type === 'kingdoms' ? ['villages'] : ['members']), ...(type === 'alliances' ? ['territory_share'] : [])];
-  const observationMetrics = type => [...standardMetrics(type).filter(m=>!populationMetrics.includes(m)), ...(type === 'wars' ? warMetrics : [])];
-  const worldMetrics = [...commonMetrics.filter(m=>!populationMetrics.includes(m) && m !== 'population_share'),'kingdoms','villages','wars','tracked_characters','total_deaths','attacker_deaths','defender_deaths'];
+  const observationMetrics = type => [...standardMetrics(type).filter(m=>!populationMetrics.includes(m)), ...(type === 'wars' ? ['total_deaths','attackers','defenders'] : [])];
+  const worldMetrics = [...commonMetrics.filter(m=>!populationMetrics.includes(m) && m !== 'population_share'),'kingdoms','villages','wars','tracked_characters','total_deaths'];
   const worldSeries = metric => metric.endsWith('_deaths') ? data.casualtySeries(metric) : data.series('world','',metric);
   const metricsFor = type => [...standardMetrics(type), ...(type === 'wars' ? warMetrics : [])];
   function entityAge(entity) {
@@ -572,36 +572,15 @@
         if (!owners.has(key)) owners.set(key, { name: run.owner === null ? '—' : data.entity('kingdoms', run.owner)?.name || `Unknown kingdom #${run.owner}`, type: run.owner === null ? null : 'kingdoms', id: run.owner, intervals: [] });
         owners.get(key).intervals.push(run);
       }
-      ownership = section('Recorded kingdom allegiance', `<div class="panel">
-<p>Owner: ${snapshot ? snapshot.kingdom_id === null ? '—' : link('kingdoms', snapshot.kingdom_id) : '—'}</p>${timeline([...owners.values()], 'ownership', { filter: false })}
-<div class="table-wrap">
-<table class="year-table">
-<thead>
-<tr>
-<th class="year-column">Year</th>
-<th>Previous owner</th>
-<th>Next owner</th>
-</tr>
-</thead>
-<tbody>${history.changes.map(c => `<tr>
-<td class="year-column"><button data-event-year="${c.to}">${c.to}</button></td>
-<td>${c.previous === null ? '—' : link('kingdoms', c.previous)}</td>
-<td>${c.owner === null ? '—' : link('kingdoms', c.owner)}</td>
-</tr>`).join('')}</tbody>
-</table>
-</div>
-</div>`);
+      ownership = panel('Kingdoms',timeline([...owners.values()], 'ownership'));
     } else if (type === 'kingdoms') {
       const rows = data.catalog('villages').flatMap(v => { const runs = data.ownership(v.id).runs.filter(r => String(r.owner) === String(id)); return runs.length ? [{ name: v.name, id: v.id, type: 'villages', species: v.founding_species, intervals: runs }] : []; });
-      const current = data.observed('kingdoms', id, year)?.cities || [];
-      ownership = section('Village ownership', `<div class="panel">${timeline(rows, 'owned-villages')}<div class="owned-village-list" tabindex="0" aria-label="Selected-year recorded villages">${current.map(v => link('villages', v)).join(', ') || '—'}</div></div>`);
+      ownership = panel('Villages',timeline(rows, 'owned-villages'));
     }
-    const membership = data.memberships(type, id, year);
-    const membershipText = membership.length ? membership.map(m => `${link('kingdoms', m.id)} <span class="pill">${esc(m.side || 'member')} · ${esc(m.status)}</span>`).join(' · ') : '—';
-    const relationshipPanel = (title, rows, records, chartId, introduction = '') => section(title, `<div class="panel">${introduction}${timeline(rows, chartId, { filter: false, sideColors: type === 'wars' })}<div class="table-wrap"><table><thead><tr><th>Related entity</th><th>Role</th><th>Start</th><th>End</th><th>At selected year</th></tr></thead><tbody>${records.map(r => `<tr><td>${link(r.type, r.id)}</td><td>${esc(r.side || 'Member')}</td><td>${esc(date(r.start_year))}</td><td>${esc(date(r.end_year))}</td><td>${H.intervalStatus(r, year)}</td></tr>`).join('') || '<tr><td colspan="5">—</td></tr>'}</tbody></table></div></div>`);
+    const relationshipPanel = (title, rows, records, chartId) => panel(title,timeline(rows,chartId,{sideColors:type==='wars'}));
     const relations = type === 'kingdoms'
       ? ['wars','alliances'].map(t => relationshipPanel(typeLabel(t), intervals.filter(r => r.type === t), relationshipRecords.filter(r => r.type === t), 'involvement-' + t)).join('')
-      : intervals.length ? relationshipPanel(type === 'wars' ? 'War participation' : 'Alliance membership', intervals, relationshipRecords, 'involvement', `<p>${membershipText}</p>`) : '';
+      : intervals.length ? relationshipPanel('Kingdoms', intervals, relationshipRecords, 'involvement') : '';
     const highlightMetric = metrics.includes(pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population')) ? pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population') : metrics[0], stats = data.stats(type, id, highlightMetric);
     const historical = `<div class="panel"><div class="controls">${selector(`entity-highlight-${type}`, 'Lifetime measure', metrics, highlightMetric)}</div>${lifetimeHighlights(stats, highlightMetric, metricColor(highlightMetric))}${type === 'alliances' ? staticSummary(summary, [['Membership', ['historical_members','peak_members']], ['Participation', ['intervals','rejoining','participation_changes']]]) : ''}</div>`;
     const chartId = `entity-${type}`, observationOptions = observationMetrics(type), historicalMetric = observationOptions.includes(pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army')) ? pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army') : observationOptions[0];
@@ -610,7 +589,7 @@
     observationSeries.push({name:`Global ${singular(type)} average`,color:THEME['comparison-secondary'],points:data.averageSeries(type,historicalMetric)});
     const baseCharts = panel('Historical observations',chart(observationSeries,historicalMetric,{id:'entity-observations-'+type}),selector(`${chartId}-metric`,'Measure',observationOptions,historicalMetric));
     const secondary = type === 'characters' ? '' : demographics(type,id,`entity-${type}-species`);
-    let uniqueCharts = type === 'characters' ? characterHistory(id) : '';
+    const characterSections = type === 'characters' ? characterHistory(id) : {chronology:'',family:''};
     if (type === 'kingdoms' || type === 'villages') ownership += leadershipHistory(type,id);
     return `<div class="page-head entity-record" style="--record-color:${entityColor(type,id)}">
 <div>
@@ -626,7 +605,7 @@
 <dd>${esc(date(entity.end_year, false))}</dd>
 </div>
 <div>
-<dt>Exact duration</dt>
+<dt>Duration</dt>
 <dd data-number>${H.duration(entity) === null ? '—' : format(H.duration(entity)) + ' years'}</dd>
 </div>${type === 'characters' ? `<div><dt>Species</dt><dd>${cell(entity.species,'species')}</dd></div><div><dt>Gender</dt><dd>${esc(entity.gender ?? '—')}</dd></div>` : ''}${entity.founding_species ? `<div>
 <dt>Founding species</dt>
@@ -638,10 +617,10 @@
 <div>
 <dt>Instigator</dt>
 <dd>${cell(entity.instigator, 'instigator')}</dd>
-</div>` : ''}</dl><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
+</div>` : ''}</dl><div class="controls"><button data-entity-window="${esc(id)}" data-entity-type="${type}">View lifespan</button></div><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
 </div>
 
-</div>${snapshot?.complete === false ? '<p class="warning">Some relationships are unresolved or uncertain. Incomplete totals are unavailable; confirmed participant counts are lower bounds.</p>' : ''}${section(label(singular(type)) + ' snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear))}${section('Lifetime recorded highlights', historical)}<div class="grid">${secondary}${baseCharts}${uniqueCharts}</div>${ownership}${relations}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
+</div>${snapshot?.complete === false ? '<p class="warning">Some recorded relationships are uncertain or inconsistent. Unverified values are unavailable; see Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
   }
   function snapshotAssociations(type,id,snapshot) {
     if(type==='villages') {
@@ -659,7 +638,7 @@
   function characterHistory(id) {
     const relatives=data.family(id);
     const family='<div class="table-wrap"><table><thead><tr><th>Relation</th><th>Character</th></tr></thead><tbody>'+relatives.map(r=>'<tr><td>'+esc(r.relationship)+'</td><td>'+link('characters',r.id)+'</td></tr>').join('')+'</tbody></table></div>';
-    return observationTimeline('characters',id,'role',null,'Role history')+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdom history')+observationTimeline('characters',id,'village_id','villages','Home village history')+panel('Family',relatives.length?family:'<p class="empty">No relatives recorded.</p>');
+    return {chronology:observationTimeline('characters',id,'role',null,'Roles')+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdoms')+observationTimeline('characters',id,'village_id','villages','Villages'),family:section('Family','<div class="panel">'+(relatives.length?family:'<p class="empty">—</p>')+'</div>')};
   }
   function leadershipHistory(type,id) {
     const role=type==='kingdoms'?'king':'leader',field=type==='kingdoms'?'kingdom_id':'village_id',rows=[];
@@ -667,20 +646,20 @@
       const runs=data.observationRuns('characters',e.id,'ruler',s=>s.role===role && String(s[field])===String(id)).runs.filter(r=>r.value);
       if(runs.length)rows.push({name:e.name||'#'+e.id,id:e.id,type:'characters',intervals:runs});
     }
-    let content=section(type==='kingdoms'?'Kings':'Village leaders','<div class="panel">'+timeline(rows,'rulers-'+type+'-'+id,{filter:false})+'</div>');
+    let content=panel(type==='kingdoms'?'Kings':'Leaders',timeline(rows,'rulers-'+type+'-'+id));
     if(type==='kingdoms') {
       const rows=new Map(),history=data.observationRuns(type,id,'capital',(r,y)=>data.records.get(y)?.raw.characters===undefined?null:r.cities?.[0]??null);
       for(const r of history.runs){const k=String(r.value);if(!rows.has(k))rows.set(k,{name:r.value==null?'—':data.entity('villages',r.value)?.name||'#'+r.value,type:'villages',id:r.value,intervals:[]});rows.get(k).intervals.push(r);}
-      content=section('Capitals','<div class="panel">'+timeline([...rows.values()],'capitals-'+id,{filter:false})+'</div>')+content;
+      content=panel('Capitals',timeline([...rows.values()],'capitals-'+id))+content;
     }return content;
   }
   function entityTabs(type) {
     return '<nav class="entity-tabs" aria-label="Entity types">' + H.TYPES.map(t => '<a href="#/browser/' + t + '"' + (t === type ? ' aria-current="page"' : '') + '>' + entityIcon(t) + typeLabel(t) + '</a>').join('') + '</nav>';
   }
   function browserColumns(type, mode) {
-    if (type === 'characters') return ['name','id','species','gender','start_year','end_year','duration',...(mode === 'year' ? ['role','kingdom_id','village_id','level','coins','kills'] : ['peak_level','peak_coins','peak_kills'])];
+    if (type === 'characters') return ['name','id','species','gender','start_year','end_year','duration',...(mode === 'year' ? ['entity_age','role','kingdom_id','village_id','level','coins','kills'] : ['peak_level','peak_coins','peak_kills'])];
     const identity = ['name', 'id', ...(type === 'kingdoms' || type === 'villages' ? ['founding_species'] : []), 'start_year', 'end_year', 'duration'];
-    if (mode === 'year') return [...identity, ...(type === 'villages' ? ['kingdom_id'] : type === 'wars' ? ['war_type', 'instigator'] : []), ...metricsFor(type), ...(type === 'kingdoms' ? ['wars', 'alliances'] : [])];
+    if (mode === 'year') return [...identity, 'entity_age', ...(type === 'villages' ? ['kingdom_id'] : type === 'wars' ? ['war_type', 'instigator'] : []), ...metricsFor(type), ...(type === 'kingdoms' ? ['wars', 'alliances'] : [])];
     if (type === 'wars') return [...identity, 'war_type', 'instigator', 'latest_attacker_deaths', 'latest_defender_deaths', 'latest_total_deaths', 'latest_year', 'historical_members', 'distinct_attackers', 'distinct_defenders', 'participation_changes'];
     return [...identity, ...['population', 'army', 'territory', 'houses', 'food', 'coins', ...(type === 'kingdoms' ? ['villages'] : type === 'villages' ? ['loyalty'] : ['members'])].map(m => `peak_${m}`), ...(type === 'kingdoms' ? ['distinct_wars', 'distinct_alliances'] : type === 'villages' ? ['owners', 'ownership_changes'] : ['historical_members', 'intervals', 'rejoining', 'participation_changes'])];
   }
@@ -703,7 +682,7 @@
     const rows = data.catalog(type).flatMap(e => {
       const snap = data.snapshot(type, e.id, year);
       if (s.mode === 'year' && !snap) return [];
-      const values = s.mode === 'history' ? data.summary(type, e.id) : { ...e, duration: H.duration(e), ...snap };
+      const values = s.mode === 'history' ? data.summary(type, e.id) : { ...e, duration: H.duration(e), ...snap, entity_age: entityAge(e) };
       if (s.species && (e.founding_species || e.species) !== s.species) return [];
       if (s.warType && e.war_type !== s.warType) return [];
       if (type === 'characters') {
@@ -765,7 +744,13 @@
     }
     while (parent.childNodes.length > fresh.length) parent.lastChild.remove();
   }
-  let pointer = null, tooltipHideTimer;
+  let pointer = null, tooltipHideTimer, linkTipTimer, linkTipTarget=null, linkTipReady=false;
+  function cancelLinkTip() { clearTimeout(linkTipTimer);linkTipTarget=null;linkTipReady=false; }
+  function hoverTip(event, target) {
+    if(!target.matches('a.entity-link,a[data-age]')) {cancelLinkTip();simpleTooltip(event,target.dataset.tip);return;}
+    if(linkTipTarget!==target) {cancelLinkTip();linkTipTarget=target;$('chart-tooltip').hidden=true;linkTipTimer=setTimeout(()=>{if(linkTipTarget===target && target.isConnected){linkTipReady=true;simpleTooltip(pointer||event,target.dataset.tip);}},500);}
+    else if(linkTipReady) simpleTooltip(event,target.dataset.tip);
+  }
   function deferTooltipHide() { clearTimeout(tooltipHideTimer); tooltipHideTimer = setTimeout(() => { if (!$('chart-tooltip').matches(':hover')) $('chart-tooltip').hidden = true; }, 180); }
   $('chart-tooltip').addEventListener('pointerenter', () => clearTimeout(tooltipHideTimer));
   $('chart-tooltip').addEventListener('pointerleave', deferTooltipHide);
@@ -788,11 +773,11 @@
     const plot = target?.closest('[data-plot]'), track = target?.closest('[data-track]'), tip = target?.closest('[data-tip]');
     if (plot) showChartTooltip(pointer, plot);
     else if (track) showTimelineTooltip(pointer, track);
-    else if (tip) simpleTooltip(pointer, tip.dataset.tip);
+    else if (tip) hoverTip(pointer, tip);
     else $('chart-tooltip').hidden = true;
   }
   document.addEventListener('pointermove', e => { pointer = {clientX:e.clientX,clientY:e.clientY}; highlightKey(e.target); });
-  document.addEventListener('pointerleave', () => { pointer = null; highlightKey(null); $('chart-tooltip').hidden = true; });
+  document.addEventListener('pointerleave', () => { pointer = null; cancelLinkTip(); highlightKey(null); $('chart-tooltip').hidden = true; });
   $('main').addEventListener('focusin', e => highlightKey(e.target));
   $('main').addEventListener('focusout', () => highlightKey(null));
   function render(live = false, allowAnimation = true) {
@@ -850,6 +835,7 @@
       const next = await H.parse(metadataText, annual, count => { $('load-status').textContent = `Indexed ${count.toLocaleString()} observations…`; });
       await H.prepare(next, message => { $('load-status').textContent = message; });
       stopPlayback(); finishNumbers(); animated.clear(); numberSeen.clear();
+      $('metadata').value = ''; $('annual').value = '';
       data = next; year = next.years.at(-1); age = null; customWindow = false; windowStart = null; windowEnd = null;
       legendHidden.clear(); eventViews.clear(); scrollPositions.clear(); preferences.clear(); pages.clear(); browserStates.clear(); tableStates.clear();
       const allNames = H.TYPES.flatMap(type => data.catalog(type).filter(e => e.name).map(e => ({name:e.name,id:e.id,type})));
@@ -1005,6 +991,10 @@
     if (target.dataset.allColumns) { const s = browserState(target.dataset.allColumns), available = browserColumns(target.dataset.allColumns, s.mode); s.columns[s.mode] = s.columns[s.mode].length === available.length ? ['name'] : available; render(); }
     if (target.dataset.toggle) { preferences.set(target.dataset.toggle, !pref(target.dataset.toggle, false)); render(); }
     if (target.dataset.year) selectYear(target.dataset.year);
+    if (target.dataset.entityWindow) {
+      const entity=data.entity(target.dataset.entityType,target.dataset.entityWindow),a=H.boundary(entity.start_year),b=H.boundary(entity.end_year);
+      age=null;customWindow=true;windowStart=a?.lo ?? data.years[0];windowEnd=b?.hi ?? data.years.at(-1);syncWindow();
+    }
     if (target.dataset.eventYear) { const y = Number(target.dataset.eventYear); if (!scopeYears().includes(y)) { age = null; customWindow = false; windowStart = null; windowEnd = null; } selectYear(y); }
     if (target.dataset.age !== undefined) { e.preventDefault(); selectAge(target.dataset.age); }
     if (target.dataset.sort) { const s = tableStates.get(target.dataset.sort); if (s.field === target.dataset.field) s.direction *= -1; else { s.field = target.dataset.field; s.direction = 1; } render(); }
@@ -1031,7 +1021,7 @@
 
   }
   $('main').addEventListener('pointermove', event => {
-    const tip = event.target.closest('[data-tip]'); if (tip) simpleTooltip(event, tip.dataset.tip);
+    const tip = event.target.closest('[data-tip]'); if (tip) hoverTip(event, tip);
     const plot = event.target.closest('[data-plot]');
     if (plot) showChartTooltip(event, plot);
     const track = event.target.closest('[data-track]');
@@ -1040,7 +1030,7 @@
   $('main').addEventListener('pointerout', event => {
     const plot = event.target.closest('[data-plot]');
     const track = event.target.closest('[data-track]');
-    if (event.target.closest('[data-tip]')) deferTooltipHide();
+    const tip=event.target.closest('[data-tip]');if(tip && !tip.contains(event.relatedTarget)){cancelLinkTip();deferTooltipHide();}
     if (track && !track.contains(event.relatedTarget)) { deferTooltipHide(); track.closest('.timeline-content').querySelectorAll('.track-hover').forEach(line => line.hidden = true); }
     if (plot && !plot.contains(event.relatedTarget)) { deferTooltipHide(); plot.parentNode.querySelector('.hover-line').setAttribute('hidden', ''); }
   });

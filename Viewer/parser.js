@@ -145,10 +145,11 @@
       if (this.records.has(year)) throw new Error(`Line ${line}: duplicate recorded year ${year}.`);
       const indexes = new Map(), badOwners = new Set();
       for (const type of ['kingdoms', 'villages', 'characters', 'wars']) {
-        if (type === 'characters' && record.characters === undefined) { indexes.set(type,new Map()); continue; }
+        if (type === 'characters' && record.characters === undefined) { if(this.hasCharacters)this.warn('Year '+year+': character observations are missing; character coverage is unavailable.');indexes.set(type,new Map()); continue; }
         if (!Array.isArray(record[type])) throw new Error(`Line ${line}: ${type} must be an array.`);
         const index = new Map();
-        for (const item of record[type]) {
+        for (const rawItem of record[type]) {
+          const item = type === 'characters' ? {...rawItem} : rawItem;
           if (!item || !validId(item.id)) throw new Error(`Line ${line}: invalid ${type} identity.`);
           const id = key(item.id);
           if (index.has(id)) throw new Error(`Line ${line}: duplicate ${type} identity ${id}.`);
@@ -191,14 +192,36 @@
           this.warn(`Year ${year}, village ${village.id}: ownership differs from kingdom city lists.`);
         }
       }
+      // Keep source rows intact; contradictory fields are unavailable in derived views.
+      const characters=indexes.get('characters'), offices=new Map();
+      const describe=(type,id)=>(this.entity(type,id)?.name || 'Unknown '+type.slice(0,-1))+' (#'+id+')';
+      for(const c of characters.values()) {
+        const context='Year '+year+', '+describe('characters',c.id);
+        const village=indexes.get('villages').get(key(c.village_id));
+        for(const [field,target] of [['kingdom_id','kingdoms'],['village_id','villages']]) if(c[field]!=null && (!validId(c[field]) || !indexes.get(target).has(key(c[field])))) {this.warn(context+': '+field+' is not present in this observation; affiliation unavailable.');c[field]=null;}
+        if(village && key(village.kingdom_id)!==key(c.kingdom_id)) {this.warn(context+': kingdom disagrees with home village '+describe('villages',village.id)+'; kingdom and office unavailable.');c.kingdom_id=null;c.role=null;c.affiliation_uncertain=true;}
+        if(![null,'king','leader','captain','warrior','citizen'].includes(c.role)) c.role=null;
+        if(c.role==='king'||c.role==='leader') {
+          const target=c.role==='king'?'kingdoms':'villages',id=c[c.role==='king'?'kingdom_id':'village_id'],owner=indexes.get(target).get(key(id)),field=c.role==='king'?'king_id':'leader_id';
+          if(!owner || (Object.hasOwn(owner,field) && owner[field]!==c.id)) {this.warn(context+': claimed '+c.role+' is not confirmed by the '+target+' appointment; office unavailable.');c.role=null;continue;}
+          const k=target+':'+id;if(!offices.has(k))offices.set(k,[]);offices.get(k).push(c);
+        }
+      }
+      for(const [office,claims] of offices) if(claims.length>1){this.warn('Year '+year+', '+office+': multiple claimed rulers ('+claims.map(c=>describe('characters',c.id)).join(', ')+'); no ruler can be established.');for(const c of claims)c.role=null;}
+      for(const [target,field,role,association] of [['kingdoms','king_id','king','kingdom_id'],['villages','leader_id','leader','village_id']]) for(const owner of indexes.get(target).values()) if(Object.hasOwn(owner,field)&&owner[field]!=null) {const c=characters.get(key(owner[field]));if(!c||c.role!==role||key(c[association])!==key(owner.id))this.warn('Year '+year+', '+describe(target,owner.id)+': appointed '+role+' is missing or contradictory.');}
+      const speciesTotal=sum(SPECIES.map(f=>record.world[f]));
+      if(numeric(speciesTotal)&&numeric(record.world.global_population)&&speciesTotal!==record.world.global_population)this.warn('Year '+year+': global population differs from its species total.');
+      for(const v of record.villages){const total=sum(SPECIES.map(f=>v[f]));if(numeric(total)&&numeric(v.population)&&total>v.population)this.warn('Year '+year+', village '+v.id+': species total exceeds population.');if(numeric(v.army)&&numeric(v.population)&&v.army>v.population)this.warn('Year '+year+', village '+v.id+': army exceeds population.');}
       this.records.set(year, { raw: record, indexes, badOwners });
     }
     finish() {
       this.years = [...this.records.keys()].sort((a, b) => a - b);
       if (!this.years.length) throw new Error('annual.jsonl has no observations.');
       this.yearIndex = new Map(this.years.map((y, i) => [y, i]));
+      if(this.hasCharacters && [...this.records.values()].some(r=>r.raw.kingdoms.some(k=>!Object.hasOwn(k,'king_id')) || r.raw.villages.some(v=>!Object.hasOwn(v,'leader_id'))))this.warn('Older observations lack ruler appointment IDs. A single recorded king or leader claim cannot be independently verified; contradictory claims are withheld.');
       this.gaps = this.years.slice(1).flatMap((y, i) => y > this.years[i] + 1 ? [[this.years[i], y]] : []);
       for (const histories of this.observations.values()) for (const history of histories.values()) history.sort((a, b) => a.year - b.year);
+      for(const e of this.catalog('characters')) for(const parent of e.p||[]){const p=this.entity('characters',parent);if(p && p.start_year>=e.start_year)this.warn('Character '+e.id+': parent '+parent+' was not born before this character.');}
       for (const [id,history] of this.observations.get('characters')) for(let i=1;i<history.length;i++) if(numeric(history[i].record.kills)&&numeric(history[i-1].record.kills)&&history[i].record.kills<history[i-1].record.kills) this.warn('Character '+id+': cumulative kills decreased; change unavailable.');
       for (const [id, history] of this.observations.get('wars')) {
         for (let i = 1; i < history.length; i++) for (const field of ['attacker_deaths', 'defender_deaths']) {
@@ -274,7 +297,7 @@
         out.kingdoms = record.raw.kingdoms.length; out.villages = record.raw.villages.length; out.wars = record.raw.wars.length;
         out.tracked_characters = Array.isArray(record.raw.characters) ? record.raw.characters.length : null;
       } else if (type === 'characters' && item) {
-        out={kingdom_id:item.kingdom_id,village_id:item.village_id,role:item.role,complete:true};
+        out={kingdom_id:item.kingdom_id,village_id:item.village_id,role:item.role,complete:!item.affiliation_uncertain};
         for(const field of ['level','coins','kills']) out[field]=this.validStat(item[field]);
         const h=this.history(type,id),i=h.findIndex(p=>p.year===year),old=h[i-1];
         out.kill_change=old && numeric(out.kills) && numeric(old.record.kills) && out.kills>=old.record.kills ? out.kills-old.record.kills : null;
@@ -304,7 +327,7 @@
         out = this.participantSnapshot(type,id,year);
       }
       if (out) {
-        if(type==='kingdoms' || type==='villages') out.tracked_characters=Array.isArray(record.raw.characters) ? record.raw.characters.filter(c=>c[type==='kingdoms'?'kingdom_id':'village_id']!=null && key(c[type==='kingdoms'?'kingdom_id':'village_id'])===key(id)).length : null;
+        if(type==='kingdoms' || type==='villages') out.tracked_characters=Array.isArray(record.raw.characters) && !(type==='kingdoms' && [...record.indexes.get('characters').values()].some(c=>c.affiliation_uncertain)) ? [...record.indexes.get('characters').values()].filter(c=>c[type==='kingdoms'?'kingdom_id':'village_id']!=null && key(c[type==='kingdoms'?'kingdom_id':'village_id'])===key(id)).length : null;
         this.ratios(out,year);
         if (type === 'alliances') out.territory_share = ratio(out.territory, this.snapshot('world', '', year)?.territory);
       }
@@ -510,7 +533,7 @@
       if (this.summaryCache.has(cacheKey)) return this.summaryCache.get(cacheKey);
       const events = [], add = (year, text, t, entityId, from = null) => events.push({ year, text, type: t, id: entityId, from });
       for (const t of TYPES) for (const e of this.catalog(t)) {
-        if (type && (t !== type || key(e.id) !== key(id))) continue;
+        if ((!type && t==='characters') || (type && (t !== type || key(e.id) !== key(id)))) continue;
         const h = this.history(t, e.id), name = e.name || `#${e.id}`;
         const start = boundary(e.start_year);
         if (t === 'characters') { if (h.length) add(h[0].year, `${name}: first observed`, t,e.id); }
@@ -537,6 +560,17 @@
           const a = boundary(i.start_year), b = boundary(i.end_year);
           if (a) add(a.hi, `${relation.entity.name}: ${a.exact ? 'joined' : 'first observed participating'}${i.side ? ` as ${i.side === 'attacker' ? 'an attacker' : 'a defender'}` : ''}`, relation.type, relation.entity.id);
           if (b) add(b.hi, `${relation.entity.name}: ${b.exact ? 'left' : 'no longer observed participating'}`, relation.type, relation.entity.id);
+        }
+      }
+      if(type==='kingdoms'||type==='villages') {
+        const role=type==='kingdoms'?'king':'leader',field=type==='kingdoms'?'kingdom_id':'village_id';
+        for(const e of this.catalog('characters')) {
+          const runs=this.observationRuns('characters',e.id,'office',r=>r.role===role && key(r[field])===key(id)).runs;
+          for(const run of runs.filter(r=>r.value)) {
+            add(run.start_year,e.name+': first observed as '+role,'characters',e.id);
+            const next=this.history('characters',e.id).find(p=>p.year>run.end_year);
+            if(next && !(next.record.role===role && key(next.record[field])===key(id)))add(next.year,e.name+': no longer observed as '+role,'characters',e.id);
+          }
         }
       }
       events.sort((a, b) => a.year - b.year);

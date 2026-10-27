@@ -106,25 +106,26 @@ Unnamed worlds use numbered directories such as `HistoryBox_0`.
 
 ### annual.jsonl
 
-Begins with a single `metadata` header identifying the world, name, slot, and last recorded year. Subsequent lines contain four annual categories:
+Begins with a single `metadata` header identifying the world, name, slot, and last recorded year. Subsequent lines contain five annual categories:
 
 1. `world` — Year and global population by species.
-2. `kingdoms` — Kingdom IDs and owned village IDs.
-3. `villages` — Population, species breakdown, army, loyalty, territory, housing, food, and coins.
-4. `wars` — Cumulative attacker and defender casualties.
+2. `kingdoms` — Kingdom IDs, capital-first owned village IDs, and the current `king_id` (or null).
+3. `villages` — Population, species breakdown, army, loyalty, territory, housing, food, coins, and the current `leader_id` (or null).
+4. `characters` — Current kingdom, village, confirmed office or occupation, level, personal coins, and cumulative kills.
+5. `wars` — Cumulative attacker and defender casualties.
 
 Each line after the header represents one recorded year.
 
 ### overview.json
 
-Contains six major categories:
+Contains seven major categories:
 
 1. `metadata` — Persistent world GUID (`id`), name, save slot, and last recorded `year`.
 2. `ages` — Historical world ages and their lifespans.
 3. `kingdoms` — Kingdom identities, initial species (`founding_species`), and observed lifespans.
 4. `villages` — Village identities, initial species (`founding_species`), and observed lifespans.
 5. `wars` — War identities, participants, sides, and involvement intervals.
-6. `alliances` — Alliance identities and kingdom membership intervals.
+7. `alliances` — Alliance identities and kingdom membership intervals.
 
 Overview information and both metadata headers are updated with every committed observation.
 
@@ -157,3 +158,11 @@ The mod is intended to remain platform-independent, but compatibility with Windo
 ## License
 
 Distributed under the MIT License. See the repository's `LICENSE` file.
+
+### Character capture integrity
+
+Characters enroll through actual `Kingdom.king` or `City.leader` appointments and remain tracked afterward. Annual affiliations come from live `Actor.kingdom` and `Actor.city` references, not save-time `ActorData.civ_kingdom_id` / `cityID`. Profession flags alone do not establish an office. Other recognized occupations remain available; an unconfirmed former office is null. Missing API members fail capture instead of silently supplying a false vacancy.
+
+The recorder rejects duplicate or unverified rulers, missing appointed characters, and disagreement between a character and their home village owner before committing either file. Annual `king_id` and `leader_id` support independent Viewer validation. A null appointment means no observed live office holder. Validation failures leave the previous paired files intact. Historical exports made with the former profession/save-ID implementation cannot be reconstructed reliably from those files alone; the Viewer reports and withholds contradictory derived values without changing source records.
+
+The revised recorder compiles against the locally installed WorldBox/Unity assemblies. The harness tests stale save IDs, stale profession flags, actual appointments, and paired-file failure recovery; an in-game run remains required to validate capture timing on each supported game version.

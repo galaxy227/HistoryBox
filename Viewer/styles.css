@@ -391,3 +391,7 @@ html { scroll-padding-top: calc(var(--navigation-height,85px) + 12px); }
 .context input[type="number"]:disabled { background:var(--inset-surface); color:var(--muted); border-color:var(--line); }
 .ranking-year { color:var(--muted); margin:0 0 18px; font-variant-numeric:tabular-nums; }
 .snapshot-associations { margin:0 0 20px; padding:16px 0; border-bottom:1px solid var(--line); }
+.select-menu { position:fixed; z-index:1000; overflow-y:auto; overflow-x:hidden; border:1px solid var(--line); border-radius:5px; background:var(--panel); color:var(--text); box-shadow:0 6px 18px var(--shadow-medium); overscroll-behavior:contain; }
+.select-menu [role="option"] { height:36px; line-height:36px; padding:0 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.select-menu [role="option"]:hover, .select-menu [aria-selected="true"] { background:var(--hover-surface); }
+.select-menu [aria-disabled="true"] { opacity:.4; cursor:default; }

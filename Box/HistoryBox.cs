@@ -954,6 +954,7 @@ namespace HistoryBox
     {
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "cities", Order = 2)] public List<long> Cities = new List<long>();
+        [DataMember(Name = "king_id", Order = 3)] public long? KingId;
         public long? CapitalId;
         public string Name;
         public string Species;
@@ -975,6 +976,7 @@ namespace HistoryBox
         [DataMember(Name = "houses", Order = 11)] public int Houses;
         [DataMember(Name = "food", Order = 12)] public int Food;
         [DataMember(Name = "coins", Order = 13)] public int Coins;
+        [DataMember(Name = "leader_id", Order = 14)] public long? LeaderId;
         public string Name;
         public string Species;
 
@@ -1110,6 +1112,16 @@ namespace HistoryBox
                 if (character.KingdomId.HasValue && !kingdomIds.Contains(character.KingdomId.Value)) throw new InvalidDataException("Unresolved character kingdom: " + character.Id);
                 if (character.VillageId.HasValue && !villageIds.Contains(character.VillageId.Value)) throw new InvalidDataException("Unresolved character home: " + character.Id);
             }
+            HashSet<long> kings = new HashSet<long>(), leaders = new HashSet<long>();
+            foreach (CharacterAnnual c in record.Characters)
+            {
+                VillageAnnual home = record.Villages.Find(v => c.VillageId == v.Id);
+                if (home != null && home.KingdomId != c.KingdomId) throw new InvalidDataException("Character affiliation disagrees with home village: " + c.Id);
+                if (c.Role == "king" && (!c.KingdomId.HasValue || !kings.Add(c.KingdomId.Value) || record.Kingdoms.Find(k => k.Id == c.KingdomId).KingId != c.Id)) throw new InvalidDataException("Unverified or duplicate king: " + c.Id);
+                if (c.Role == "leader" && (home == null || !leaders.Add(home.Id) || home.LeaderId != c.Id)) throw new InvalidDataException("Unverified or duplicate village leader: " + c.Id);
+            }
+            foreach (KingdomAnnual k in record.Kingdoms) if (k.KingId.HasValue && !record.Characters.Exists(c => c.Id == k.KingId && c.Role == "king" && c.KingdomId == k.Id)) throw new InvalidDataException("King not captured: " + k.Id);
+            foreach (VillageAnnual v in record.Villages) if (v.LeaderId.HasValue && !record.Characters.Exists(c => c.Id == v.LeaderId && c.Role == "leader" && c.VillageId == v.Id)) throw new InvalidDataException("Leader not captured: " + v.Id);
             foreach (WarAnnual war in record.Wars) if (war.AttackerDeaths < 0 || war.DefenderDeaths < 0) throw new InvalidDataException("Invalid war casualties: " + war.Id);
         }
 
@@ -1168,6 +1180,7 @@ namespace HistoryBox
                     Id = id,
                     Name = Reader.Name(kingdom),
                     Species = Reader.Text(Reader.Call(kingdom, "getFounderSpecies"), "id"),
+                    KingId = LiveId(Reader.Member(kingdom, "king")),
                     CapitalId = Reader.Get(kingdom, "capital") == null ? (long?)null : Reader.Id(Reader.Get(kingdom, "capital"))
                 };
 
@@ -1209,6 +1222,7 @@ namespace HistoryBox
                 {
                     Id = id,
                     KingdomId = kingdom == null ? (long?)null : Reader.Id(kingdom),
+                    LeaderId = LiveId(Reader.Member(city, "leader")),
                     Name = Reader.Name(city),
                     Species = Reader.Text(Reader.Call(city, "getFounderSpecies"), "id"),
                     Population = Reader.Int(Reader.Call(city, "getPopulationPeople")),
@@ -1249,7 +1263,9 @@ namespace HistoryBox
                 if (actor == null || Reader.Inactive(actor)) continue;
                 long id = Reader.Id(actor);
                 bool alreadyTracked = tracked != null && tracked.Contains(id);
-                bool eligible = Reader.Call(actor, "get_is_profession_king") as bool? == true || Reader.Call(actor, "get_is_profession_leader") as bool? == true;
+                object liveKingdom = Reader.Member(actor, "kingdom"), liveCity = Reader.Member(actor, "city");
+                string role = CharacterRole(actor, liveKingdom, liveCity);
+                bool eligible = role == "king" || role == "leader";
                 if (!alreadyTracked && !eligible) continue;
 
                 string species = ActorSpecies(actor);
@@ -1260,8 +1276,8 @@ namespace HistoryBox
                 object birth = Reader.Require(actorData, "created_time");
                 int birthYear = Date.getYear(Convert.ToSingle(birth, CultureInfo.InvariantCulture));
                 if (birthYear > year) throw new InvalidDataException("Invalid character birthday: " + id);
-                long? kingdomId = Reader.NullableId(Reader.Get(actorData, "civ_kingdom_id"));
-                long? villageId = Reader.NullableId(Reader.Get(actorData, "cityID"));
+                long? kingdomId = LiveId(liveKingdom);
+                long? villageId = LiveId(liveCity);
                 if (kingdomId.HasValue && !kingdoms.Contains(kingdomId.Value)) kingdomId = null;
                 if (villageId.HasValue && !villages.Contains(villageId.Value)) villageId = null;
 
@@ -1274,7 +1290,7 @@ namespace HistoryBox
                     BirthYear = birthYear,
                     KingdomId = kingdomId,
                     VillageId = villageId,
-                    Role = CharacterRole(actor),
+                    Role = role,
                     Level = Reader.Int(Reader.Require(actorData, "level")),
                     Coins = Reader.Int(Reader.Require(actorData, "money")),
                     Kills = Reader.Int(Reader.Require(actorData, "kills"))
@@ -1289,10 +1305,12 @@ namespace HistoryBox
             record.Characters.Sort((a, b) => a.Id.CompareTo(b.Id));
         }
 
-        private static string CharacterRole(object actor)
+        private static long? LiveId(object value) { return value == null || Reader.Inactive(value) ? (long?)null : Reader.Id(value); }
+
+        private static string CharacterRole(object actor, object kingdom, object city)
         {
-            if (Reader.Call(actor, "get_is_profession_king") as bool? == true) return "king";
-            if (Reader.Call(actor, "get_is_profession_leader") as bool? == true) return "leader";
+            if (kingdom != null && ReferenceEquals(Reader.Member(kingdom, "king"), actor)) return "king";
+            if (city != null && ReferenceEquals(Reader.Member(city, "leader"), actor)) return "leader";
             if (Reader.Call(actor, "get_is_army_captain") as bool? == true) return "captain";
             if (Reader.Call(actor, "get_is_profession_warrior") as bool? == true) return "warrior";
             if (Reader.Call(actor, "get_is_profession_citizen") as bool? == true) return "citizen";
@@ -1517,6 +1535,15 @@ namespace HistoryBox
             }
 
             return null;
+        }
+
+        public static object Member(object source, string name)
+        {
+            for (Type type = source == null ? null : source.GetType(); type != null; type = type.BaseType)
+            {
+                if (type.GetField(name, Flags) != null || type.GetProperty(name, Flags) != null) return Get(source, name);
+            }
+            throw new MissingMemberException(source == null ? "null" : source.GetType().Name, name);
         }
 
         public static object Require(object source, string name)
