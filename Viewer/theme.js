@@ -1,0 +1,78 @@
+/* Shared palette for the Viewer and root loading page. */
+(function () {
+  'use strict';
+  // EDIT PALETTE HERE: all Viewer colors are defined in this single block.
+  const THEME = {
+    // Vibrant colors are reserved for species data.
+    'human': '#4c8dcb',
+    'elf': '#e0bc49',
+    'orc': '#78ce45',
+    'dwarf': '#cf6767',
+    // Data with no species designation.
+    'global-data': '#ffffff',
+    'entity-data': '#e6e1d5',
+    'comparison-secondary': '#858b93',
+    'comparison-1': '#d0d2d4',
+    'comparison-2': '#a6abb1',
+    'comparison-3': '#787f88',
+    'comparison-4': '#bac0c6',
+    'comparison-5': '#626a75',
+    'unknown-species': '#a6b5b8',
+    'attacker-data': "#e6e1d5",
+    'defender-data': "#967658",
+    // Site surfaces, typography, and controls.
+    'bg': '#101113',
+    'panel': '#1b1e23',
+    'panel2': '#252a31',
+    'line': '#3b424c',
+    'text': '#f0f0ed',
+    'muted': '#b0b5bd',
+    'accent': '#d3d9e1',
+    'neutral-card': '#c3cad3',
+    'gain': "#35cda3",
+    'loss': "#f47797",
+    'sticky-surface': '#171a1ff5',
+    'active-surface': '#363d47',
+    'active-border': '#89929e',
+    'heading-border': '#aeb5bf',
+    'hover-surface': '#343a43',
+    'inset-surface': '#171a1f',
+    'tooltip-surface': '#14171bf5',
+    'tooltip-border': '#69717c',
+    'timeline-surface': '#111316',
+    'link-hover': '#ffffff',
+    // Logo, warnings, and errors.
+    'logo-light': "#9ca4ad",
+    'logo-dark': "#30363d",
+    'logo-shadow': "#13161a",
+    'warning-border': "#655a43",
+    'warning-surface': "#292722",
+    'warning-text': "#c1b9a9",
+    'error-text': "#b39090",
+    // Chart markers, overlays, highlights, and shadows.
+    'selected-year': '#ffffff',
+    'hover-year': '#ffffff60',
+    'chart-gap': "#797d8322",
+    'gap-dark': "#14171abb",
+    'gap-light': "#64686e55",
+    'button-glint': '#ffffff0a',
+    'button-shadow': '#090f1880',
+    'nav-glint': '#ffffff25',
+    'nav-shadow': '#0c1522',
+    'heading-glint': '#ffffff0c',
+    'panel-glint': '#ffffff08',
+    'shadow-soft': '#0002',
+    'shadow-medium': '#0004',
+    'shadow-strong': '#0008',
+    'modal-backdrop': '#0009',
+    'row-stripe': '#ffffff02',
+    'row-hover': '#ffffff04',
+    'bar-border': '#ffffff55',
+    'bar-glint': '#ffffff35',
+    'transparent': '#00000000',
+    'print-paper': '#ffffff',
+    'print-ink': '#000000',
+  };
+  for (const [name, value] of Object.entries(THEME)) document.documentElement.style.setProperty(`--${name}`, value);
+  globalThis.HistoryBoxTheme = Object.freeze(THEME);
+})();

@@ -252,14 +252,10 @@ th, td { border-color: var(--line); }
   .mark { width: 26px; height: 26px; }
   .masthead button { padding: 7px 9px; font-size: 0.85rem; white-space: nowrap; }
 }
-.age-peaks .table-wrap { height: 360px; }
 .chart, .timeline-track, .chart-dragging, .chart-dragging * { user-select: none; }
 .chart-dragging { cursor: crosshair; }
 .age-title { margin: 0px 0px 24px; }
 .age-title span { color: var(--muted); font-weight: 400; }
-.age-peak-group { margin-top: 36px; }
-.age-peak-group > .controls { margin: 0px 0px 14px; }
-.age-peaks h3 { margin: 0px 0px 14px; }
 .age-timeline { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 26px; }
 .age-timeline h3 { margin: 0px 0px 20px; }
 .age-timeline .timeline-scroll { background: var(--inset-surface); border: 1px solid var(--line); border-radius: 6px; }
@@ -272,7 +268,7 @@ th, td { border-color: var(--line); }
 .timeline-space { flex: 1 1 0%; min-height: 0px; }
 .timeline-space .timeline-track { min-height: 0px; }
 .browser-toolbar button[aria-expanded="true"] { background: var(--active-surface); border-color: var(--active-border); color: var(--text); box-shadow: inset 0 -2px var(--active-border); }
-#settings { width: min(460px, 92vw); padding: 30px; }
+#settings { width:min(640px,calc(100vw - 24px)); max-width:calc(100vw - 24px); padding:clamp(16px,4vw,30px); }
 #settings h2 { margin: 0px 0px 26px; }
 #settings label { gap: 12px; padding: 8px 0px; }
 #settings form { margin-top: 28px; display: flex; justify-content: flex-end; }
@@ -384,3 +380,14 @@ html { scroll-padding-top: calc(var(--navigation-height,85px) + 12px); }
 .context input[type="number"] { width:100px; min-width:0; }
 .static-bar { display:block; width:100%; height:5px; margin-top:7px; background:var(--line); border-radius:3px; overflow:hidden; }
 .static-bar i { display:block; height:100%; background:var(--accent); opacity:.65; }
+
+.year-table { table-layout:fixed; }
+.year-column, .highlight-ledger .year-column { width:7.5rem; max-width:7.5rem; }
+.year-column button { display:block; max-width:100%; white-space:nowrap; overflow-x:auto; scrollbar-width:none; }
+.year-column button::-webkit-scrollbar { display:none; }
+#settings label, #settings form { flex-wrap:wrap; min-width:0; }
+#settings output { white-space:nowrap; }
+
+.context input[type="number"]:disabled { background:var(--inset-surface); color:var(--muted); border-color:var(--line); }
+.ranking-year { color:var(--muted); margin:0 0 18px; font-variant-numeric:tabular-nums; }
+.snapshot-associations { margin:0 0 20px; padding:16px 0; border-bottom:1px solid var(--line); }

@@ -1,9 +1,16 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta http-equiv="refresh" content="0; url=./Viewer/index.html" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="./Viewer/index.html">Viewer</a>...</p>
-  </body>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HistoryBox</title>
+  <script src="Viewer/theme.js"></script>
+  <link rel="stylesheet" href="Viewer/styles.css">
+  <meta http-equiv="refresh" content="0; url=./Viewer/index.html">
+</head>
+<body>
+  <p class="restore-status" role="status">Opening history…</p>
+  <noscript><p class="restore-status"><a href="Viewer/index.html">Open HistoryBox Viewer</a></p></noscript>
+  <script>location.replace(new URL('Viewer/index.html' + location.search + location.hash, location.href).href);</script>
+</body>
 </html>

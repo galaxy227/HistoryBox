@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -85,15 +85,12 @@ namespace HistoryBox
                     HandleSave(savedSlot.Value, year);
                 }
 
-                if (year > observedYear)
+                if (year > session.LastYear)
                 {
-                    if (year > session.LastYear)
-                    {
-                        session.Record(WorldReader.Capture(world, year));
-                    }
-
-                    observedYear = year;
+                    session.Record(WorldReader.Capture(world, year, session.TrackedCharacterIds));
                 }
+
+                observedYear = year;
             }
             catch (Exception error)
             {
@@ -114,7 +111,7 @@ namespace HistoryBox
 
             if (year > session.LastYear)
             {
-                session.Record(WorldReader.Capture(world, year));
+                session.Record(WorldReader.Capture(world, year, session.TrackedCharacterIds));
             }
 
             Debug.Log("[HistoryBox] Recording enabled.");
@@ -208,12 +205,13 @@ namespace HistoryBox
     [DataContract]
     internal sealed class MetadataRecord
     {
-        [DataMember(Name = "world", Order = 1)] public WorldMetadata World = new WorldMetadata();
+        [DataMember(Name = "metadata", Order = 1)] public WorldMetadata World = new WorldMetadata();
         [DataMember(Name = "ages", Order = 2)] public List<AgeMetadata> Ages = new List<AgeMetadata>();
         [DataMember(Name = "kingdoms", Order = 3)] public List<KingdomMetadata> Kingdoms = new List<KingdomMetadata>();
         [DataMember(Name = "villages", Order = 4)] public List<VillageMetadata> Villages = new List<VillageMetadata>();
-        [DataMember(Name = "wars", Order = 5)] public List<WarMetadata> Wars = new List<WarMetadata>();
-        [DataMember(Name = "alliances", Order = 6)] public List<AllianceMetadata> Alliances = new List<AllianceMetadata>();
+        [DataMember(Name = "characters", Order = 5)] public List<CharacterMetadata> Characters = new List<CharacterMetadata>();
+        [DataMember(Name = "wars", Order = 6)] public List<WarMetadata> Wars = new List<WarMetadata>();
+        [DataMember(Name = "alliances", Order = 7)] public List<AllianceMetadata> Alliances = new List<AllianceMetadata>();
 
         public bool Update(AnnualRecord record, int previous)
         {
@@ -229,6 +227,7 @@ namespace HistoryBox
             changed |= UpdateAges(record.Age, year, previous);
             changed |= UpdateKingdoms(record.Kingdoms, year, previous);
             changed |= UpdateVillages(record.Villages, year, previous);
+            changed |= UpdateCharacters(record.Characters, year, previous);
             changed |= UpdateWars(record.Wars, year, previous);
             changed |= UpdateAlliances(record.Alliances, year, previous);
             return changed;
@@ -355,6 +354,124 @@ namespace HistoryBox
             }
 
             return changed;
+        }
+
+        private bool UpdateCharacters(List<CharacterAnnual> observed, int year, int previous)
+        {
+            bool changed = false;
+            Dictionary<long, CharacterMetadata> known = Index(Characters, item => item.Id);
+            HashSet<long> seen = new HashSet<long>();
+
+            // First enroll every eligible actor; relationships are resolved only after
+            // newly enrolled relatives have also entered the persistent catalog.
+            foreach (CharacterAnnual state in observed)
+            {
+                if (!seen.Add(state.Id)) throw new InvalidDataException("Duplicate character ID: " + state.Id);
+                CharacterMetadata entry;
+
+                if (!known.TryGetValue(state.Id, out entry))
+                {
+                    entry = new CharacterMetadata
+                    {
+                        Id = state.Id,
+                        Name = state.Name,
+                        Species = state.Species,
+                        Gender = state.Gender,
+                        StartYear = state.BirthYear
+                    };
+                    Characters.Add(entry);
+                    known.Add(entry.Id, entry);
+                    changed = true;
+                }
+                else
+                {
+                    if (Convert.ToInt32(entry.StartYear, CultureInfo.InvariantCulture) != state.BirthYear) throw new InvalidDataException("Character birth year changed: " + state.Id);
+                    changed |= Lifecycle.Open(entry);
+                }
+            }
+
+            foreach (CharacterMetadata entry in Characters)
+            {
+                if (!seen.Contains(entry.Id)) changed |= Lifecycle.Close(entry, year, previous);
+            }
+
+            // A relationship is published only when both actors have enrolled.
+            // Parent IDs come from WorldBox's genealogical ActorData, not shared family IDs.
+            Dictionary<long, List<long>> childrenByParent = new Dictionary<long, List<long>>();
+            foreach (CharacterAnnual state in observed)
+            {
+                foreach (long parentId in state.ParentIds)
+                {
+                    if (parentId == state.Id) throw new InvalidDataException("Self-parent relationship: " + state.Id);
+                    CharacterMetadata parent;
+                    if (known.TryGetValue(parentId, out parent))
+                    {
+                        CharacterMetadata child = known[state.Id];
+                        if (Convert.ToInt32(parent.StartYear, CultureInfo.InvariantCulture) > Convert.ToInt32(child.StartYear, CultureInfo.InvariantCulture)) throw new InvalidDataException("Parent born after child: " + state.Id);
+                        HashSet<long> visited = new HashSet<long>();
+                        Stack<long> ancestors = new Stack<long>(); ancestors.Push(parentId);
+                        while (ancestors.Count > 0)
+                        {
+                            long ancestorId = ancestors.Pop();
+                            if (ancestorId == state.Id) throw new InvalidDataException("Circular character ancestry: " + state.Id);
+                            CharacterMetadata ancestor;
+                            if (visited.Add(ancestorId) && known.TryGetValue(ancestorId, out ancestor)) foreach (long previousParent in ancestor.Parents) ancestors.Push(previousParent);
+                        }
+                        changed |= AddRelated(ref child.Parents, parentId);
+                        changed |= AddRelated(ref parent.Children, state.Id);
+                    }
+
+                    List<long> children;
+                    if (!childrenByParent.TryGetValue(parentId, out children))
+                    {
+                        children = new List<long>();
+                        childrenByParent.Add(parentId, children);
+                    }
+                    children.Add(state.Id);
+                }
+            }
+
+            // Include sibling evidence from existing tracked-parent links, including
+            // previously tracked relatives who are not living in this observation.
+            foreach (CharacterMetadata entry in Characters)
+            {
+                if (entry.Parents == null) continue;
+                foreach (long parentId in entry.Parents)
+                {
+                    List<long> children;
+                    if (!childrenByParent.TryGetValue(parentId, out children))
+                    {
+                        children = new List<long>();
+                        childrenByParent.Add(parentId, children);
+                    }
+                    if (!children.Contains(entry.Id)) children.Add(entry.Id);
+                }
+            }
+
+            foreach (List<long> children in childrenByParent.Values)
+            {
+                for (int i = 0; i < children.Count; i++)
+                {
+                    for (int j = i + 1; j < children.Count; j++)
+                    {
+                        CharacterMetadata first = known[children[i]], second = known[children[j]];
+                        changed |= AddRelated(ref first.Siblings, children[j]);
+                        changed |= AddRelated(ref second.Siblings, children[i]);
+                    }
+                }
+            }
+
+            if (changed) Characters.Sort((a, b) => a.Id.CompareTo(b.Id));
+            return changed;
+        }
+
+        private static bool AddRelated(ref List<long> list, long id)
+        {
+            if (list == null) list = new List<long>();
+            if (list.Contains(id)) return false;
+            list.Add(id);
+            list.Sort();
+            return true;
         }
 
         private bool UpdateWars(List<WarAnnual> observed, int year, int previous)
@@ -589,6 +706,17 @@ namespace HistoryBox
             return changed;
         }
 
+        public void RetainRecordedCharacters(ISet<long> ids)
+        {
+            Characters.RemoveAll(item => !ids.Contains(item.Id));
+            foreach (CharacterMetadata character in Characters)
+            {
+                if (character.Parents != null) character.Parents.RemoveAll(id => !ids.Contains(id));
+                if (character.Siblings != null) character.Siblings.RemoveAll(id => !ids.Contains(id));
+                if (character.Children != null) character.Children.RemoveAll(id => !ids.Contains(id));
+            }
+        }
+
         private static Dictionary<long, T> Index<T>(IEnumerable<T> entries, Func<T, long> key)
         {
             Dictionary<long, T> result = new Dictionary<long, T>();
@@ -606,6 +734,7 @@ namespace HistoryBox
             Ages.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Kingdoms.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Villages.RemoveAll(item => Lifecycle.After(item.StartYear, year));
+            Characters.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Wars.RemoveAll(item => Lifecycle.After(item.StartYear, year));
             Alliances.RemoveAll(item => Lifecycle.After(item.StartYear, year));
 
@@ -622,6 +751,16 @@ namespace HistoryBox
             foreach (VillageMetadata item in Villages)
             {
                 Lifecycle.Trim(item, year);
+            }
+
+            HashSet<long> retainedCharacters = new HashSet<long>();
+            foreach (CharacterMetadata item in Characters) retainedCharacters.Add(item.Id);
+            foreach (CharacterMetadata item in Characters)
+            {
+                Lifecycle.Trim(item, year);
+                if (item.Parents != null) item.Parents.RemoveAll(id => !retainedCharacters.Contains(id));
+                if (item.Siblings != null) item.Siblings.RemoveAll(id => !retainedCharacters.Contains(id));
+                if (item.Children != null) item.Children.RemoveAll(id => !retainedCharacters.Contains(id));
             }
 
             foreach (WarMetadata war in Wars)
@@ -666,6 +805,7 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public string Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "slot", Order = 3)] public int? Slot;
+        [DataMember(Name = "year", Order = 4)] public int Year = -1;
     }
 
     [DataContract]
@@ -696,6 +836,21 @@ namespace HistoryBox
         [DataMember(Name = "founding_species", Order = 3)] public string FoundingSpecies;
         [DataMember(Name = "start_year", Order = 4)] public object StartYear;
         [DataMember(Name = "end_year", Order = 5)] public object EndYear;
+        object IInterval.End { get { return EndYear; } set { EndYear = value; } }
+    }
+
+    [DataContract]
+    internal sealed class CharacterMetadata : IInterval
+    {
+        [DataMember(Name = "id", Order = 1)] public long Id;
+        [DataMember(Name = "name", Order = 2)] public string Name;
+        [DataMember(Name = "species", Order = 3)] public string Species;
+        [DataMember(Name = "gender", Order = 4)] public string Gender;
+        [DataMember(Name = "start_year", Order = 5)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 6)] public object EndYear;
+        [DataMember(Name = "p", Order = 7)] public List<long> Parents = new List<long>();
+        [DataMember(Name = "s", Order = 8)] public List<long> Siblings = new List<long>();
+        [DataMember(Name = "c", Order = 9)] public List<long> Children = new List<long>();
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -760,7 +915,8 @@ namespace HistoryBox
         [DataMember(Name = "world", Order = 1)] public WorldAnnual World = new WorldAnnual();
         [DataMember(Name = "kingdoms", Order = 2)] public List<KingdomAnnual> Kingdoms = new List<KingdomAnnual>();
         [DataMember(Name = "villages", Order = 3)] public List<VillageAnnual> Villages = new List<VillageAnnual>();
-        [DataMember(Name = "wars", Order = 4)] public List<WarAnnual> Wars = new List<WarAnnual>();
+        [DataMember(Name = "characters", Order = 4)] public List<CharacterAnnual> Characters = new List<CharacterAnnual>();
+        [DataMember(Name = "wars", Order = 5)] public List<WarAnnual> Wars = new List<WarAnnual>();
         public string WorldName;
         public string Age;
         public List<AllianceState> Alliances = new List<AllianceState>();
@@ -798,6 +954,7 @@ namespace HistoryBox
     {
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "cities", Order = 2)] public List<long> Cities = new List<long>();
+        public long? CapitalId;
         public string Name;
         public string Species;
     }
@@ -831,6 +988,25 @@ namespace HistoryBox
                 case "dwarf": Dwarf++; break;
             }
         }
+    }
+
+    [DataContract]
+    internal sealed class CharacterAnnual
+    {
+        [DataMember(Name = "id", Order = 1)] public long Id;
+        [DataMember(Name = "kingdom_id", Order = 2)] public long? KingdomId;
+        [DataMember(Name = "village_id", Order = 3)] public long? VillageId;
+        [DataMember(Name = "role", Order = 4)] public string Role;
+        [DataMember(Name = "level", Order = 5)] public int? Level;
+        [DataMember(Name = "coins", Order = 6)] public int? Coins;
+        [DataMember(Name = "kills", Order = 7)] public int? Kills;
+
+        // Capture-only fields: used to maintain the permanent overview, not serialized annually.
+        public string Name;
+        public string Species;
+        public string Gender;
+        public int BirthYear;
+        public List<long> ParentIds = new List<long>();
     }
 
     [DataContract]
@@ -871,7 +1047,7 @@ namespace HistoryBox
             return Reader.First(Reader.Text(stats, "name"), Reader.Text(Reader.Get(stats, "data"), "name"));
         }
 
-        public static AnnualRecord Capture(object world, int year)
+        public static AnnualRecord Capture(object world, int year, ISet<long> trackedCharacters)
         {
             AnnualRecord record = new AnnualRecord { WorldName = GetWorldName(world) };
             record.World.Year = year;
@@ -879,9 +1055,62 @@ namespace HistoryBox
             ReadWorldPopulation(world, record.World);
             ReadKingdoms(world, record.Kingdoms);
             ReadVillages(world, record.Villages);
+            ReadCharacters(world, record, trackedCharacters, year);
             ReadWars(world, record.Wars);
             ReadAlliances(world, record.Alliances);
+            NormalizeOwnership(record);
+            Validate(record);
+            if (GetYear(world) != year) throw new InvalidDataException("World year changed during capture.");
             return record;
+        }
+
+        internal static void NormalizeOwnership(AnnualRecord record)
+        {
+            Dictionary<long, KingdomAnnual> kingdoms = new Dictionary<long, KingdomAnnual>();
+            foreach (KingdomAnnual kingdom in record.Kingdoms) { kingdoms.Add(kingdom.Id, kingdom); kingdom.Cities.Clear(); }
+            foreach (VillageAnnual village in record.Villages)
+            {
+                KingdomAnnual owner;
+                if (village.KingdomId.HasValue && kingdoms.TryGetValue(village.KingdomId.Value, out owner)) owner.Cities.Add(village.Id);
+                else village.KingdomId = null; // No active civilization owns this settlement in this snapshot.
+            }
+            foreach (KingdomAnnual kingdom in record.Kingdoms)
+            {
+                kingdom.Cities.Sort();
+                if (kingdom.Cities.Count == 0) continue;
+                if (!kingdom.CapitalId.HasValue || !kingdom.Cities.Remove(kingdom.CapitalId.Value))
+                {
+                    throw new InvalidDataException("Missing or unrecorded capital of kingdom: " + kingdom.Id);
+                }
+                kingdom.Cities.Insert(0, kingdom.CapitalId.Value);
+            }
+            foreach (WarAnnual war in record.Wars) war.Participants.RemoveAll(p => !kingdoms.ContainsKey(p.KingdomId));
+            foreach (AllianceState alliance in record.Alliances) alliance.Kingdoms.RemoveAll(id => !kingdoms.ContainsKey(id));
+        }
+
+        internal static void Validate(AnnualRecord record)
+        {
+            if (record.World == null || record.World.Year < 0) throw new InvalidDataException("Missing annual world/year.");
+            if (record.World.GlobalPopulation < 0 || record.World.Human < 0 || record.World.Elf < 0 || record.World.Orc < 0 || record.World.Dwarf < 0 || (long)record.World.Human + record.World.Elf + record.World.Orc + record.World.Dwarf != record.World.GlobalPopulation) throw new InvalidDataException("Inconsistent world population.");
+            foreach (VillageAnnual v in record.Villages)
+            {
+                if (v.Population < 0 || v.Human < 0 || v.Elf < 0 || v.Orc < 0 || v.Dwarf < 0 || v.Army < 0 || v.Territory < 0 || v.Houses < 0 || v.Food < 0 || v.Coins < 0 || (long)v.Human + v.Elf + v.Orc + v.Dwarf > v.Population) throw new InvalidDataException("Invalid village measurements: " + v.Id);
+            }
+            HashSet<long> characterIds = new HashSet<long>();
+            HashSet<long> villageIds = new HashSet<long>();
+            HashSet<long> kingdomIds = new HashSet<long>();
+            foreach (VillageAnnual village in record.Villages) villageIds.Add(village.Id);
+            foreach (KingdomAnnual kingdom in record.Kingdoms) kingdomIds.Add(kingdom.Id);
+            foreach (CharacterAnnual character in record.Characters)
+            {
+                if (!characterIds.Add(character.Id)) throw new InvalidDataException("Duplicate character ID: " + character.Id);
+                if (character.BirthYear < 0 || character.BirthYear > record.World.Year) throw new InvalidDataException("Invalid character birth year: " + character.Id);
+                if (character.Role != null && character.Role != "king" && character.Role != "leader" && character.Role != "captain" && character.Role != "warrior" && character.Role != "citizen") throw new InvalidDataException("Invalid character role: " + character.Id);
+                if (character.Level.HasValue && character.Level.Value < 0 || character.Coins.HasValue && character.Coins.Value < 0 || character.Kills.HasValue && character.Kills.Value < 0) throw new InvalidDataException("Invalid character measurements: " + character.Id);
+                if (character.KingdomId.HasValue && !kingdomIds.Contains(character.KingdomId.Value)) throw new InvalidDataException("Unresolved character kingdom: " + character.Id);
+                if (character.VillageId.HasValue && !villageIds.Contains(character.VillageId.Value)) throw new InvalidDataException("Unresolved character home: " + character.Id);
+            }
+            foreach (WarAnnual war in record.Wars) if (war.AttackerDeaths < 0 || war.DefenderDeaths < 0) throw new InvalidDataException("Invalid war casualties: " + war.Id);
         }
 
         private static string ReadAge(object world)
@@ -902,7 +1131,7 @@ namespace HistoryBox
 
         private static void ReadWorldPopulation(object world, WorldAnnual result)
         {
-            object units = Reader.Get(Reader.Require(world, "units"), "units_only_alive");
+            object units = Reader.Require(Reader.Require(world, "units"), "units_only_alive");
 
             foreach (object actor in Reader.Enumerate(units))
             {
@@ -938,7 +1167,8 @@ namespace HistoryBox
                 {
                     Id = id,
                     Name = Reader.Name(kingdom),
-                    Species = Reader.Text(Reader.Call(kingdom, "getFounderSpecies"), "id")
+                    Species = Reader.Text(Reader.Call(kingdom, "getFounderSpecies"), "id"),
+                    CapitalId = Reader.Get(kingdom, "capital") == null ? (long?)null : Reader.Id(Reader.Get(kingdom, "capital"))
                 };
 
                 foreach (object city in Reader.Enumerate(Reader.Require(kingdom, "cities")))
@@ -1002,6 +1232,71 @@ namespace HistoryBox
             }
 
             result.Sort((a, b) => a.Id.CompareTo(b.Id));
+        }
+
+        private static void ReadCharacters(object world, AnnualRecord record, ISet<long> tracked, int year)
+        {
+            // Selection is applied only upon enrollment. Once a character has been
+            // recorded, no later change of profession can remove that character.
+            HashSet<long> ids = new HashSet<long>();
+            HashSet<long> kingdoms = new HashSet<long>();
+            HashSet<long> villages = new HashSet<long>();
+            foreach (KingdomAnnual kingdom in record.Kingdoms) kingdoms.Add(kingdom.Id);
+            foreach (VillageAnnual village in record.Villages) villages.Add(village.Id);
+
+            foreach (object actor in Reader.Enumerate(Reader.Require(Reader.Require(world, "units"), "units_only_alive")))
+            {
+                if (actor == null || Reader.Inactive(actor)) continue;
+                long id = Reader.Id(actor);
+                bool alreadyTracked = tracked != null && tracked.Contains(id);
+                bool eligible = Reader.Call(actor, "get_is_profession_king") as bool? == true || Reader.Call(actor, "get_is_profession_leader") as bool? == true;
+                if (!alreadyTracked && !eligible) continue;
+
+                string species = ActorSpecies(actor);
+                if (!alreadyTracked && species != "human" && species != "elf" && species != "orc" && species != "dwarf") continue;
+                if (!ids.Add(id)) throw new InvalidDataException("Duplicate character ID: " + id);
+
+                object actorData = Reader.Require(actor, "data");
+                object birth = Reader.Require(actorData, "created_time");
+                int birthYear = Date.getYear(Convert.ToSingle(birth, CultureInfo.InvariantCulture));
+                if (birthYear > year) throw new InvalidDataException("Invalid character birthday: " + id);
+                long? kingdomId = Reader.NullableId(Reader.Get(actorData, "civ_kingdom_id"));
+                long? villageId = Reader.NullableId(Reader.Get(actorData, "cityID"));
+                if (kingdomId.HasValue && !kingdoms.Contains(kingdomId.Value)) kingdomId = null;
+                if (villageId.HasValue && !villages.Contains(villageId.Value)) villageId = null;
+
+                CharacterAnnual entry = new CharacterAnnual
+                {
+                    Id = id,
+                    Name = Reader.Name(actor),
+                    Species = species,
+                    Gender = Reader.Call(actor, "isSexMale") as bool? == true ? "male" : Reader.Call(actor, "isSexFemale") as bool? == true ? "female" : null,
+                    BirthYear = birthYear,
+                    KingdomId = kingdomId,
+                    VillageId = villageId,
+                    Role = CharacterRole(actor),
+                    Level = Reader.Int(Reader.Require(actorData, "level")),
+                    Coins = Reader.Int(Reader.Require(actorData, "money")),
+                    Kills = Reader.Int(Reader.Require(actorData, "kills"))
+                };
+
+                long? parent1 = Reader.NullableId(Reader.Get(actorData, "parent_id_1"));
+                long? parent2 = Reader.NullableId(Reader.Get(actorData, "parent_id_2"));
+                if (parent1.HasValue) entry.ParentIds.Add(parent1.Value);
+                if (parent2.HasValue && parent2 != parent1) entry.ParentIds.Add(parent2.Value);
+                record.Characters.Add(entry);
+            }
+            record.Characters.Sort((a, b) => a.Id.CompareTo(b.Id));
+        }
+
+        private static string CharacterRole(object actor)
+        {
+            if (Reader.Call(actor, "get_is_profession_king") as bool? == true) return "king";
+            if (Reader.Call(actor, "get_is_profession_leader") as bool? == true) return "leader";
+            if (Reader.Call(actor, "get_is_army_captain") as bool? == true) return "captain";
+            if (Reader.Call(actor, "get_is_profession_warrior") as bool? == true) return "warrior";
+            if (Reader.Call(actor, "get_is_profession_citizen") as bool? == true) return "citizen";
+            return null;
         }
 
         private static string ActorSpecies(object actor)
@@ -1297,6 +1592,7 @@ namespace HistoryBox
 
         public static int Int(object value)
         {
+            if (value == null) throw new InvalidDataException("Missing numeric WorldBox measurement.");
             return Convert.ToInt32(value, CultureInfo.InvariantCulture);
         }
 
@@ -1382,6 +1678,15 @@ namespace HistoryBox
         public string WorldId { get; private set; }
         public int? Slot { get; private set; }
         public int LastYear { get; private set; }
+        public ISet<long> TrackedCharacterIds
+        {
+            get
+            {
+                HashSet<long> result = new HashSet<long>();
+                foreach (CharacterMetadata character in metadata.Characters) result.Add(character.Id);
+                return result;
+            }
+        }
 
         public HistorySession(string worldId, string worldName, int? slot)
         {
@@ -1394,7 +1699,7 @@ namespace HistoryBox
                 throw new InvalidDataException("HistoryBox world GUID mismatch.");
             }
 
-            if (metadata.World.Slot != slot)
+            if (metadata.World.Id != null && metadata.World.Slot != slot)
             {
                 throw new InvalidDataException("HistoryBox save slot mismatch.");
             }
@@ -1417,17 +1722,20 @@ namespace HistoryBox
 
         public void Record(AnnualRecord record)
         {
+            HistoryStorage.Recover(directory);
+            int persistedYear = HistoryStorage.GetLastYear(directory);
+            if (persistedYear > LastYear) { metadata = HistoryStorage.LoadMetadata(directory); LastYear = persistedYear; }
+            WorldReader.Validate(record);
             if (record.World.Year <= LastYear)
             {
                 return;
             }
 
-            if (metadata.Update(record, LastYear))
-            {
-                HistoryStorage.SaveMetadata(directory, metadata);
-            }
-
-            HistoryStorage.AppendAnnual(directory, record);
+            MetadataRecord candidate = HistoryStorage.Clone(metadata);
+            candidate.Update(record, LastYear);
+            candidate.World.Year = record.World.Year;
+            HistoryStorage.Commit(directory, candidate, record);
+            metadata = candidate;
             LastYear = record.World.Year;
         }
 
@@ -1446,19 +1754,22 @@ namespace HistoryBox
                 directory = target;
             }
 
+            MetadataRecord candidate = HistoryStorage.Clone(metadata);
+            candidate.World.Slot = slot;
+            HistoryStorage.SaveMetadata(directory, candidate);
+            metadata = candidate;
             Slot = slot;
-            metadata.World.Slot = slot;
-            HistoryStorage.SaveMetadata(directory, metadata);
         }
 
         public HistorySession Duplicate(int slot, int year)
         {
             string target = HistoryStorage.GetAvailableDirectory(metadata.World.Name, slot);
-            HistoryStorage.CopyHistory(directory, target, year);
-            MetadataRecord copy = HistoryStorage.LoadMetadata(target);
+            MetadataRecord copy = HistoryStorage.Clone(metadata);
             copy.World.Slot = slot;
             copy.Trim(year);
-            HistoryStorage.SaveMetadata(target, copy);
+            copy.World.Year = HistoryStorage.GetLastYear(directory, year);
+            copy.RetainRecordedCharacters(HistoryStorage.GetRecordedCharacters(directory, copy.World.Year));
+            HistoryStorage.Commit(target, copy, null, directory);
 
             return new HistorySession
             {
@@ -1662,6 +1973,7 @@ namespace HistoryBox
 
             foreach (string folder in Directory.GetDirectories(root))
             {
+                Recover(folder);
                 if (!File.Exists(MetadataPath(folder)))
                 {
                     continue;
@@ -1768,7 +2080,7 @@ namespace HistoryBox
 
         private static string MetadataPath(string directory)
         {
-            return Path.Combine(directory, "metadata.json");
+            return Path.Combine(directory, "overview.json");
         }
 
         private static string AnnualPath(string directory)
@@ -1778,6 +2090,7 @@ namespace HistoryBox
 
         public static MetadataRecord LoadMetadata(string directory)
         {
+            Recover(directory);
             string path = MetadataPath(directory);
 
             if (!File.Exists(path))
@@ -1793,12 +2106,32 @@ namespace HistoryBox
                 {
                     throw new InvalidDataException("HistoryBox metadata is invalid.");
                 }
+                if (result.Characters == null) result.Characters = new List<CharacterMetadata>();
 
+                foreach (CharacterMetadata character in result.Characters)
+                {
+                    if (character.Parents == null) character.Parents = new List<long>();
+                    if (character.Siblings == null) character.Siblings = new List<long>();
+                    if (character.Children == null) character.Children = new List<long>();
+                }
+
+                string annual = AnnualPath(directory);
+                if (!File.Exists(annual) && result.World.Year >= 0) throw new InvalidDataException("HistoryBox annual observations are missing.");
+                if (File.Exists(annual))
+                {
+                    using (StreamReader reader = File.OpenText(annual))
+                    {
+                        string first = reader.ReadLine();
+                        AnnualHeader header = string.IsNullOrWhiteSpace(first) ? null : Deserialize<AnnualHeader>(first);
+                        if (header == null || header.Metadata == null || Serialize(header.Metadata) != Serialize(result.World)) throw new InvalidDataException("HistoryBox file metadata mismatch.");
+                    }
+                    if (GetLastYear(directory) != result.World.Year) throw new InvalidDataException("HistoryBox last-year mismatch.");
+                }
                 return result;
             }
         }
 
-        public static int GetLastYear(string directory)
+        public static int GetLastYear(string directory, int maximum = int.MaxValue)
         {
             string path = AnnualPath(directory);
 
@@ -1807,47 +2140,113 @@ namespace HistoryBox
                 return -1;
             }
 
-            int year = -1;
+            int year = -1, previous = -1;
+            bool headerRead = false;
 
             foreach (string line in File.ReadLines(path))
             {
                 if (!string.IsNullOrWhiteSpace(line))
                 {
                     AnnualRecord record = Deserialize<AnnualRecord>(line);
-                    year = Math.Max(year, record.World.Year);
+                    if (!headerRead)
+                    {
+                        AnnualHeader header = Deserialize<AnnualHeader>(line);
+                        if (record.World != null || header.Metadata == null) throw new InvalidDataException("Missing annual metadata header.");
+                        headerRead = true; continue;
+                    }
+                    if (record.World == null) throw new InvalidDataException("Unexpected repeated annual header.");
+                    if (record.World.Year <= previous) throw new InvalidDataException("Annual years are not strictly increasing.");
+                    previous = record.World.Year;
+                    if (previous <= maximum) year = previous;
                 }
             }
 
             return year;
         }
 
-        public static void SaveMetadata(string directory, MetadataRecord record)
+        // Birth-year start dates may precede first enrollment. For duplication,
+        // consult annual observations rather than treating birth as enrollment.
+        public static HashSet<long> GetRecordedCharacters(string directory, int lastYear)
+        {
+            HashSet<long> ids = new HashSet<long>();
+            if (lastYear < 0 || !File.Exists(AnnualPath(directory))) return ids;
+            foreach (string line in File.ReadLines(AnnualPath(directory)))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                AnnualRecord record = Deserialize<AnnualRecord>(line);
+                if (record.World == null) continue;
+                if (record.World.Year > lastYear) break;
+                if (record.Characters == null) continue;
+                foreach (CharacterAnnual character in record.Characters) ids.Add(character.Id);
+            }
+            return ids;
+        }
+
+        [DataContract]
+        private sealed class AnnualHeader
+        {
+            [DataMember(Name = "metadata", Order = 1)] public WorldMetadata Metadata;
+        }
+
+        // Stage both files before publication. A durable ready marker allows replay after interruption.
+        public static MetadataRecord Clone(MetadataRecord value) { return Deserialize<MetadataRecord>(Serialize(value)); }
+
+        public static void Commit(string directory, MetadataRecord overview, AnnualRecord next, string sourceDirectory = null)
         {
             Directory.CreateDirectory(directory);
-            string path = MetadataPath(directory);
-            string temporary = path + ".tmp";
-
-            try
+            Recover(directory);
+            string staging = Path.Combine(directory, "commit.pending");
+            Directory.CreateDirectory(staging);
+            string annual = AnnualPath(sourceDirectory ?? directory);
+            using (StreamWriter writer = new StreamWriter(AnnualPath(staging), false, new UTF8Encoding(false)))
             {
-                string json = FormatMetadata(Serialize(record));
-                File.WriteAllText(temporary, json, new UTF8Encoding(false));
+                writer.WriteLine(Serialize(new AnnualHeader { Metadata = overview.World }));
+                if (File.Exists(annual))
+                {
+                    foreach (string line in File.ReadLines(annual))
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        AnnualRecord old = Deserialize<AnnualRecord>(line);
+                        if (old.World != null && old.World.Year <= overview.World.Year) writer.WriteLine(line);
+                    }
+                }
+                if (next != null) writer.WriteLine(Serialize(next));
+                writer.Flush(); ((FileStream)writer.BaseStream).Flush(true);
+            }
+            WriteDurable(MetadataPath(staging), FormatMetadata(Serialize(overview)));
+            WriteDurable(Path.Combine(staging, "ready"), "ready");
+            Recover(directory);
+        }
 
-                if (File.Exists(path))
-                {
-                    File.Replace(temporary, path, null);
-                }
-                else
-                {
-                    File.Move(temporary, path);
-                }
-            }
-            finally
+        public static void SaveMetadata(string directory, MetadataRecord record)
+        {
+            Commit(directory, record, null);
+        }
+
+        private static void WriteDurable(string path, string text)
+        {
+            using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                if (File.Exists(temporary))
-                {
-                    File.Delete(temporary);
-                }
+                byte[] bytes = new UTF8Encoding(false).GetBytes(text);
+                stream.Write(bytes, 0, bytes.Length); stream.Flush(true);
             }
+        }
+
+        public static void Recover(string directory)
+        {
+            string staging = Path.Combine(directory, "commit.pending");
+            string ready = Path.Combine(staging, "ready");
+            if (!File.Exists(ready)) return;
+            foreach (string name in new[] { "annual.jsonl", "overview.json" })
+            {
+                string target = Path.Combine(directory, name), temporary = target + ".tmp";
+                File.Copy(Path.Combine(staging, name), temporary, true);
+                using (FileStream stream = new FileStream(temporary, FileMode.Open, FileAccess.Write, FileShare.None)) stream.Flush(true);
+                if (File.Exists(target)) File.Replace(temporary, target, null);
+                else File.Move(temporary, target);
+            }
+            File.Delete(ready);
+            File.Delete(AnnualPath(staging)); File.Delete(MetadataPath(staging)); Directory.Delete(staging);
         }
 
         private static string FormatMetadata(string json)
@@ -1915,39 +2314,6 @@ namespace HistoryBox
             }
 
             return result.ToString();
-        }
-
-        public static void AppendAnnual(string directory, AnnualRecord record)
-        {
-            Directory.CreateDirectory(directory);
-
-            using (StreamWriter writer = new StreamWriter(AnnualPath(directory), true, new UTF8Encoding(false)))
-            {
-                writer.WriteLine(Serialize(record));
-            }
-        }
-
-        public static void CopyHistory(string source, string target, int year)
-        {
-            Directory.CreateDirectory(target);
-            File.Copy(MetadataPath(source), MetadataPath(target));
-            string annual = AnnualPath(source);
-
-            if (!File.Exists(annual))
-            {
-                return;
-            }
-
-            using (StreamWriter writer = new StreamWriter(AnnualPath(target), false, new UTF8Encoding(false)))
-            {
-                foreach (string line in File.ReadLines(annual))
-                {
-                    if (!string.IsNullOrWhiteSpace(line) && Deserialize<AnnualRecord>(line).World.Year <= year)
-                    {
-                        writer.WriteLine(line);
-                    }
-                }
-            }
         }
 
         private static string Serialize<T>(T value)

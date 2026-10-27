@@ -1,7 +1,7 @@
 /* HistoryBox data layer. No DOM, selected UI state, network, or rendering dependencies. */
 (function (root) {
   'use strict';
-  const TYPES = ['kingdoms', 'villages', 'wars', 'alliances'];
+  const TYPES = ['kingdoms', 'villages', 'characters', 'wars', 'alliances'];
   const SPECIES = ['human', 'elf', 'orc', 'dwarf'];
   const ADDITIVE = ['population', ...SPECIES, 'army', 'territory', 'houses', 'food', 'coins'];
   const numeric = value => typeof value === 'number' && Number.isFinite(value);
@@ -50,9 +50,11 @@
   }
   class Dataset {
     constructor(metadata) {
-      if (!metadata || typeof metadata !== 'object' || !metadata.world || typeof metadata.world.id !== 'string') throw new Error('metadata.json requires a world object with a string id.');
+      if (!metadata || typeof metadata !== 'object' || !metadata.metadata || typeof metadata.metadata.id !== 'string' || !metadata.metadata.id || !(metadata.metadata.name === null || typeof metadata.metadata.name === 'string') || !(metadata.metadata.slot === null || Number.isSafeInteger(metadata.metadata.slot) && metadata.metadata.slot >= 0) || !Number.isSafeInteger(metadata.metadata.year) || metadata.metadata.year < 0) throw new Error('overview.json requires metadata with id, name, slot, and last recorded year. Re-export older histories with the updated Box.');
       this.raw = metadata;
-      this.world = metadata.world;
+      this.hasCharacters = Object.hasOwn(metadata,'characters');
+      this.familyCache = new Map();
+      this.world = metadata.metadata;
       this.warnings = [];
       this.warningCount = 0;
       this.entities = new Map();
@@ -70,6 +72,7 @@
       // Unknown entity collections remain addressable by the same identity/query API.
       const types = [...new Set([...TYPES, ...Object.keys(metadata).filter(t => t !== 'ages' && Array.isArray(metadata[t]) && metadata[t].some(e => e && validId(e.id)))])];
       for (const type of types) {
+        if (type === 'characters' && !this.hasCharacters) { this.entities.set(type,new Map()); this.observations.set(type,new Map()); continue; }
         if (!Array.isArray(metadata[type])) throw new Error(`metadata.${type} must be an array.`);
         const index = new Map();
         for (const entity of metadata[type]) {
@@ -80,6 +83,21 @@
         }
         this.entities.set(type, index);
         this.observations.set(type, new Map());
+      }
+      for (const e of this.catalog('characters')) {
+        if (!Number.isSafeInteger(e.start_year) || e.start_year < 0) throw new Error('Character birth year must be exact.');
+        if (!SPECIES.includes(e.species)) this.warn('Character '+e.id+': unknown species.');
+        for (const field of ['p','s','c']) {
+          if (!Array.isArray(e[field])) throw new Error('Character '+e.id+': family must be an array.');
+          const seen=new Set();
+          for (const id of e[field]) { if (!validId(id) || key(id)===key(e.id) || seen.has(key(id))) throw new Error('Character '+e.id+': invalid family reference.'); seen.add(key(id));this.checkReference('characters',id,'Character '+e.id); }
+          for (const id of e[field]) {
+            const relative=this.entity('characters',id),reverse={p:'c',c:'p',s:'s'}[field];
+            if(relative && !relative[reverse]?.some(other=>key(other)===key(e.id))) this.warn('Character '+e.id+': family relationship with '+id+' is not reciprocal.');
+          }
+        }
+        const ancestors=[...e.p],seen=new Set();
+        while(ancestors.length) {const id=ancestors.pop();if(key(id)===key(e.id))throw new Error('Character ancestry contains a cycle.');if(seen.has(key(id)))continue;seen.add(key(id));ancestors.push(...(this.entity('characters',id)?.p || []));}
       }
       for (const type of ['wars', 'alliances']) {
         for (const entity of this.catalog(type)) {
@@ -126,7 +144,8 @@
       if (!Number.isSafeInteger(year) || year < 0) throw new Error(`Line ${line}: world.year must be a nonnegative safe integer.`);
       if (this.records.has(year)) throw new Error(`Line ${line}: duplicate recorded year ${year}.`);
       const indexes = new Map(), badOwners = new Set();
-      for (const type of ['kingdoms', 'villages', 'wars']) {
+      for (const type of ['kingdoms', 'villages', 'characters', 'wars']) {
+        if (type === 'characters' && record.characters === undefined) { indexes.set(type,new Map()); continue; }
         if (!Array.isArray(record[type])) throw new Error(`Line ${line}: ${type} must be an array.`);
         const index = new Map();
         for (const item of record[type]) {
@@ -138,8 +157,12 @@
           const histories = this.observations.get(type);
           if (!histories.has(id)) histories.set(id, []);
           histories.get(id).push({ year, record: item });
-          const fields = type === 'villages' ? [...ADDITIVE, 'loyalty'] : type === 'wars' ? ['attacker_deaths', 'defender_deaths'] : [];
+          const fields = type === 'villages' ? [...ADDITIVE, 'loyalty'] : type === 'wars' ? ['attacker_deaths', 'defender_deaths'] : type === 'characters' ? ['level','coins','kills'] : [];
           for (const field of fields) if (!numeric(item[field]) || (field !== 'loyalty' && item[field] < 0)) this.warn(`Year ${year}, ${type} ${id}: invalid or missing ${field}.`);
+          if (type === 'characters') {
+            for (const [field,target] of [['kingdom_id','kingdoms'],['village_id','villages']]) if (item[field] !== null) this.checkReference(target,item[field],'Character '+id);
+            if (item.role !== null && !['king','leader','captain','warrior','citizen'].includes(item.role)) this.warn('Character '+id+': unknown role.');
+          }
           const meta = this.entity(type, id);
           if (meta && intervalStatus(meta, year) === 'inactive') this.warn(`Year ${year}, ${type} ${id}: observation contradicts metadata lifespan.`);
         }
@@ -176,6 +199,7 @@
       this.yearIndex = new Map(this.years.map((y, i) => [y, i]));
       this.gaps = this.years.slice(1).flatMap((y, i) => y > this.years[i] + 1 ? [[this.years[i], y]] : []);
       for (const histories of this.observations.values()) for (const history of histories.values()) history.sort((a, b) => a.year - b.year);
+      for (const [id,history] of this.observations.get('characters')) for(let i=1;i<history.length;i++) if(numeric(history[i].record.kills)&&numeric(history[i-1].record.kills)&&history[i].record.kills<history[i-1].record.kills) this.warn('Character '+id+': cumulative kills decreased; change unavailable.');
       for (const [id, history] of this.observations.get('wars')) {
         for (let i = 1; i < history.length; i++) for (const field of ['attacker_deaths', 'defender_deaths']) {
           if (history[i].record[field] < history[i - 1].record[field]) this.warn(`War ${id}: ${field} decreased between ${history[i - 1].year} and ${history[i].year}; casualty change unavailable.`);
@@ -220,6 +244,7 @@
       const out = this.aggregate(rows,complete);
       out.members = complete ? known.length : null;
       out.confirmed_members = known.length;
+      out.tracked_characters = complete ? sum(rows.map(r=>r.tracked_characters)) : null;
       return this.ratios(out,year);
     }
     ratios(out, year) {
@@ -247,6 +272,13 @@
         out.population = this.validStat(record.raw.world.global_population);
         SPECIES.forEach(s => { out[s] = this.validStat(record.raw.world[s]); });
         out.kingdoms = record.raw.kingdoms.length; out.villages = record.raw.villages.length; out.wars = record.raw.wars.length;
+        out.tracked_characters = Array.isArray(record.raw.characters) ? record.raw.characters.length : null;
+      } else if (type === 'characters' && item) {
+        out={kingdom_id:item.kingdom_id,village_id:item.village_id,role:item.role,complete:true};
+        for(const field of ['level','coins','kills']) out[field]=this.validStat(item[field]);
+        const h=this.history(type,id),i=h.findIndex(p=>p.year===year),old=h[i-1];
+        out.kill_change=old && numeric(out.kills) && numeric(old.record.kills) && out.kills>=old.record.kills ? out.kills-old.record.kills : null;
+        out.change_from=old?.year ?? null;
       } else if (type === 'villages' && item) {
         out = { kingdom_id: item.kingdom_id, complete: true };
         [...ADDITIVE, 'loyalty'].forEach(f => { out[f] = this.validStat(item[f], f === 'loyalty'); });
@@ -255,6 +287,7 @@
         const villages = Array.isArray(item.cities) ? item.cities : [];
         out = this.aggregate(villages.map(v => this.snapshot('villages', v, year)), complete);
         out.villages = complete ? villages.length : null;
+        out.capital_id = complete && Object.hasOwn(record.raw,'characters') ? villages[0] ?? null : null;
         for (const t of ['wars', 'alliances']) out[t] = this.relations(id, t).filter(r => intervalStatus(r.entity, year) === 'active' && this.memberships(t, r.entity.id, year).some(m => key(m.id) === key(id) && m.status === 'active')).length;
       } else if (type === 'wars' && item) {
         const members = this.memberships(type, id, year);
@@ -271,6 +304,7 @@
         out = this.participantSnapshot(type,id,year);
       }
       if (out) {
+        if(type==='kingdoms' || type==='villages') out.tracked_characters=Array.isArray(record.raw.characters) ? record.raw.characters.filter(c=>c[type==='kingdoms'?'kingdom_id':'village_id']!=null && key(c[type==='kingdoms'?'kingdom_id':'village_id'])===key(id)).length : null;
         this.ratios(out,year);
         if (type === 'alliances') out.territory_share = ratio(out.territory, this.snapshot('world', '', year)?.territory);
       }
@@ -280,7 +314,7 @@
     series(type, id, metric) {
       const k = `${type}:${id}:${metric}`;
       if (!this.seriesCache.has(k)) {
-        const points = this.years.map(year => ({ year, value: number(this.snapshot(type, id, year)?.[metric]) }));
+        const points = this.years.map(year => { const snapshot=this.snapshot(type,id,year); return { year, value:number(snapshot?.[metric]), ...(/^(?:change_|kill_change)/.test(metric) ? {from:snapshot?.change_from ?? null} : {}) }; });
         boundedSet(this.seriesCache, k, points, 250);
       }
       return this.seriesCache.get(k);
@@ -351,6 +385,10 @@
       const add = (t, v) => names.push(`${this.entity(t, v)?.name || ''} ${v}`);
       if (type === 'kingdoms') {
         for (const r of this.relations(id)) if (year === null || this.memberships(r.type, r.entity.id, year).some(m => key(m.id) === key(id) && m.status === 'active')) add(r.type, r.entity.id);
+      } else if (type === 'characters') {
+        const points=year === null ? this.history(type,id) : [{record:this.observed(type,id,year)}];
+        for(const p of points) if(p.record) {add('kingdoms',p.record.kingdom_id);add('villages',p.record.village_id);}
+        for(const relative of this.family(id)) add('characters',relative.id);
       } else if (type === 'villages') {
         if (year !== null) { const owner = this.observed(type, id, year)?.kingdom_id; if (owner !== null && owner !== undefined) add('kingdoms', owner); }
         else for (const owner of new Set(this.history(type, id).map(p => p.record.kingdom_id))) if (owner !== null) add('kingdoms', owner);
@@ -361,6 +399,33 @@
         } else for (const m of entity.kingdoms || []) if (!role || m.involvement?.some(i => i.side === role)) add('kingdoms', m.kingdom_id);
       }
       return names.join(' ');
+    }
+    observationRuns(type,id,field,select = record => record[field]) {
+      const runs=[],changes=[];let previous=null,run=null;
+      for(const p of this.history(type,id)) {const value=select(p.record,p.year);
+        if(!previous || key(previous.value)!==key(value) || p.year!==previous.year+1) {run={value,start_year:p.year,end_year:p.year,observed:true};runs.push(run);} else run.end_year=p.year;
+        if(previous && key(previous.value)!==key(value)) changes.push({from:previous.year,to:p.year,previous:previous.value,value});
+        previous={year:p.year,value};
+      }return {runs,changes};
+    }
+    rulers(type,id,year) {
+      return this.catalog('characters').filter(e=>{const s=this.observed('characters',e.id,year);return s && s.role===(type==='kingdoms'?'king':'leader') && key(s[type==='kingdoms'?'kingdom_id':'village_id'])===key(id);});
+    }
+    family(id) {
+      const cacheKey=key(id);if(this.familyCache.has(cacheKey))return this.familyCache.get(cacheKey);
+      const queue=[{id:cacheKey,up:0,down:0,side:false}],seen=new Set([cacheKey+':up']),found=new Map();
+      for(let at=0;at<queue.length;at++) {const current=queue[at],e=this.entity('characters',current.id);if(!e)continue;
+        for(const field of current.down||current.side ? ['c'] : ['p','s','c']) for(const next of e[field]||[]) {
+          const k=key(next);if(k===cacheKey||!this.entity('characters',k))continue;
+          const up=current.up+(field==='p'),down=current.down+(field==='c'),side=current.side||field==='s',visit=k+':'+(down||side?'down':'up');if(seen.has(visit))continue;seen.add(visit);
+          const relationship=side ? up===0&&down===0?'Sibling':up===1&&down===0?'Aunt / uncle':up===1&&down===1?'Cousin':'Extended' : !down ? up===1?'Parent':up===2?'Grandparent':'Extended' : !up ? down===1?'Child':'Extended' : up===1&&down===1?'Sibling':up===2&&down===1?'Aunt / uncle':up===2&&down===2?'Cousin':'Extended';
+          if(!found.has(k))found.set(k,{id:next,relationship});queue.push({id:k,up,down,side});
+        }
+      }
+      for(const child of this.entity('characters',id)?.c||[]) for(const parent of this.entity('characters',child)?.p||[]) if(key(parent)!==cacheKey && this.entity('characters',parent)) found.set(key(parent),{id:parent,relationship:'Spouse'});
+      const order=['Spouse','Grandparent','Parent','Sibling','Child','Aunt','Uncle','Cousin','Extended'];
+      const result=[...found.values()].map(r=>{let relationship=r.relationship;if(relationship==='Aunt / uncle') relationship=this.entity('characters',r.id)?.gender==='female'?'Aunt':this.entity('characters',r.id)?.gender==='male'?'Uncle':'Extended';if(!order.includes(relationship))relationship='Extended';return {...r,relationship};}).sort((a,b)=>order.indexOf(a.relationship)-order.indexOf(b.relationship)||String(this.entity('characters',a.id)?.name||a.id).localeCompare(String(this.entity('characters',b.id)?.name||b.id)));
+      this.familyCache.set(cacheKey,result);return result;
     }
     ownership(id) {
       if (this.ownershipCache.has(key(id))) return this.ownershipCache.get(key(id));
@@ -384,7 +449,7 @@
       const entity = this.entity(type, id);
       if (!entity) return {};
       const out = { ...entity, duration: duration(entity) };
-      const metrics = [...ADDITIVE, 'villages', 'loyalty', 'members'];
+      const metrics = type === 'characters' ? ['level','coins','kills'] : [...ADDITIVE, 'villages', 'loyalty', 'members'];
       for (const metric of metrics) out[`peak_${metric}`] = null;
       const years = type === 'alliances' ? this.years : this.history(type, id).map(p => p.year);
       for (const year of years) {
@@ -423,10 +488,11 @@
       const years = this.periodYears(ageIndex), allowed = new Set(years), out = { years, population: this.stats('world', '', 'population', years) };
       for (const type of ['kingdoms', 'villages']) {
         const inPeriod = value => ageIndex === null ? value <= this.years.at(-1) : intervalStatus(this.ages[ageIndex],value) === 'active';
-        out[`${type}_founded`] = this.catalog(type).filter(e => { const start = boundary(e.start_year); return start?.exact && inPeriod(start.lo); }).length;
-        out[`${type}_observed`] = this.catalog(type).filter(e => !boundary(e.start_year)?.exact && allowed.has(this.history(type,e.id)[0]?.year)).length;
+        out[`${type}_observed`] = this.catalog(type).filter(e => allowed.has(this.history(type,e.id)[0]?.year)).length;
         out[`${type}_ended`] = this.catalog(type).filter(e => { const b = boundary(e.end_year); return b && inPeriod(b.lo) && inPeriod(b.hi); }).length;
       }
+      out.tracked_characters = years.some(y=>Array.isArray(this.records.get(y).raw.characters)) ? this.catalog('characters').filter(e=>this.history('characters',e.id).some(p=>allowed.has(p.year))).length : null;
+      out.alliances_observed = this.catalog('alliances').filter(e => years.some(y => intervalStatus(e,y)==='active')).length;
       out.wars_observed = this.catalog('wars').filter(e => this.history('wars', e.id).some(p => allowed.has(p.year))).length;
       let total = 0, count = 0;
       for (const e of this.catalog('wars')) {
@@ -446,16 +512,21 @@
       for (const t of TYPES) for (const e of this.catalog(t)) {
         if (type && (t !== type || key(e.id) !== key(id))) continue;
         const h = this.history(t, e.id), name = e.name || `#${e.id}`;
-        const start = boundary(e.start_year), civilization = t === 'kingdoms' || t === 'villages';
-        if (start?.exact && start.lo >= this.years[0] && start.lo <= this.years.at(-1)) add(start.lo, `${name}: ${civilization ? 'founded' : 'began'}`, t, e.id);
-        else if (h.length) add(h[0].year, `${name}: observed`, t, e.id);
+        const start = boundary(e.start_year);
+        if (t === 'characters') { if (h.length) add(h[0].year, `${name}: first observed`, t,e.id); }
+        else if (start?.exact && start.lo >= this.years[0] && start.lo <= this.years.at(-1)) add(start.lo, `${name}: first observed`, t, e.id);
+        else if (h.length) add(h[0].year, `${name}: first observed`, t, e.id);
         const end = boundary(e.end_year);
-        if (end) add(end.hi, `${name}: ${end.exact ? 'ended' : 'observed ended by'} ${end.hi}`, t, e.id);
+        if (end) add(end.hi, `${name}: ${end.exact ? 'ended' : 'no longer observed'}`, t, e.id);
+        if (t === 'characters') for(const field of ['role','kingdom_id','village_id']) for(const c of this.observationRuns(t,e.id,field).changes) {
+          const target=field==='kingdom_id'?'kingdoms':'villages', value=field==='role' ? c.value || '—' : this.entity(target,c.value)?.name || '—';
+          add(c.to, name+': '+(field==='role'?'observed as '+value:field==='kingdom_id'?'kingdom changed to '+value:'home village changed to '+value),t,e.id,c.from);
+        }
         if (t === 'villages') for (const c of this.ownership(e.id).changes) add(c.to, `${name}: recorded owner changed from ${this.entity('kingdoms', c.previous)?.name || c.previous || 'none'} to ${this.entity('kingdoms', c.owner)?.name || c.owner || 'none'}`, t, e.id, c.from);
         if (t === 'wars' || t === 'alliances') for (const m of e.kingdoms || []) for (const interval of m.involvement || []) {
           const start = boundary(interval.start_year), finish = boundary(interval.end_year), member = this.entity('kingdoms', m.kingdom_id)?.name || `#${m.kingdom_id}`;
-          if (start) add(start.hi, `${name}: ${member} ${start.exact ? 'involvement began' : 'observed participating by'} ${start.hi}${interval.side ? ` (${interval.side})` : ''}`, t, e.id);
-          if (finish) add(finish.hi, `${name}: ${member} ${finish.exact ? 'involvement ended' : 'observed participation ended by'} ${finish.hi}`, t, e.id);
+          if (start) add(start.hi, `${name}: ${member} ${start.exact ? 'joined' : 'first observed participating'}${interval.side ? ` as ${interval.side === 'attacker' ? 'an attacker' : 'a defender'}` : ''}`, t, e.id);
+          if (finish) add(finish.hi, `${name}: ${member} ${finish.exact ? 'left' : 'no longer observed participating'}`, t, e.id);
         }
       }
       if (type === 'kingdoms') {
@@ -464,8 +535,8 @@
         }
         for (const relation of this.relations(id)) for (const i of relation.member.involvement) {
           const a = boundary(i.start_year), b = boundary(i.end_year);
-          if (a) add(a.hi, `${relation.entity.name}: ${a.exact ? 'involvement began' : 'observed participating by'} ${a.hi}${i.side ? ` (${i.side})` : ''}`, relation.type, relation.entity.id);
-          if (b) add(b.hi, `${relation.entity.name}: ${b.exact ? 'involvement ended' : 'observed participation ended by'} ${b.hi}`, relation.type, relation.entity.id);
+          if (a) add(a.hi, `${relation.entity.name}: ${a.exact ? 'joined' : 'first observed participating'}${i.side ? ` as ${i.side === 'attacker' ? 'an attacker' : 'a defender'}` : ''}`, relation.type, relation.entity.id);
+          if (b) add(b.hi, `${relation.entity.name}: ${b.exact ? 'left' : 'no longer observed participating'}`, relation.type, relation.entity.id);
         }
       }
       events.sort((a, b) => a.year - b.year);
@@ -487,6 +558,7 @@
     for (const type of TYPES) for (const entity of dataset.catalog(type)) {
       dataset.summary(type, entity.id);
       if (type === 'villages') dataset.ownership(entity.id);
+      if (type === 'characters') dataset.family(entity.id);
       count++;
       if (Date.now() - yieldedAt > 12) { progress(`Preparing historical catalog: ${count} entities…`); await pause(); yieldedAt = Date.now(); }
     }
@@ -496,9 +568,9 @@
   }
   async function parse(metadataText, annualSource, onProgress = () => {}) {
     let metadata;
-    try { metadata = JSON.parse(metadataText.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`metadata.json: ${e.message}`); }
+    try { metadata = JSON.parse(metadataText.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`overview.json: ${e.message}`); }
     const dataset = new Dataset(metadata);
-    let buffer = '', line = 0, count = 0, yieldedAt = Date.now();
+    let buffer = '', line = 0, count = 0, header = false, previousYear = -1, yieldedAt = Date.now();
     async function consume(chunk, final = false) {
       buffer += chunk;
       let newline;
@@ -509,6 +581,16 @@
         if (text.trim()) {
           let record;
           try { record = JSON.parse(text.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`annual.jsonl line ${line}: ${e.message}`); }
+          if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error(`annual.jsonl line ${line}: expected an object.`);
+          if (!header) {
+            if (Object.keys(record).length !== 1 || !record.metadata) throw new Error('annual.jsonl must begin with a single metadata header.');
+            const canonical = v => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k,canonical(v[k])])) : v;
+            if (JSON.stringify(canonical(record.metadata)) !== JSON.stringify(canonical(metadata.metadata))) throw new Error(record.metadata.id !== metadata.metadata.id ? 'Files describe a different world.' : record.metadata.slot !== metadata.metadata.slot ? 'Files describe a different save.' : 'Files describe a different recording time.');
+            header = true; continue;
+          }
+          if (record.metadata !== undefined) throw new Error('annual.jsonl metadata must appear only once, at the beginning.');
+          if (!Number.isSafeInteger(record.world?.year) || record.world.year <= previousYear) throw new Error('annual.jsonl observation years must be strictly increasing, without duplicate years.');
+          previousYear = record.world.year;
           dataset.addRecord(record, line); count++;
           if (Date.now() - yieldedAt > 12) { onProgress(count); await pause(); yieldedAt = Date.now(); }
         }
@@ -522,6 +604,7 @@
       finally { reader.releaseLock(); }
     }
     await consume('', true); onProgress(count);
+    if (!header || previousYear !== metadata.metadata.year) throw new Error('The last annual observation does not match metadata.year.');
     return dataset.finish();
   }
   root.HistoryBox = { parse, prepare, Dataset, TYPES, SPECIES, ADDITIVE, boundary, intervalStatus, duration, compare, numeric, ratio, sum };

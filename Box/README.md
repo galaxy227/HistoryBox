@@ -85,8 +85,8 @@ On Windows, this normally corresponds to:
 
 Each tracked world has its own directory containing:
 
-- `annual.jsonl` — Historical snapshots, one JSON object per recorded year.
-- `metadata.json` — Persistent information about historical entities and their lifespans.
+- `annual.jsonl` — One metadata header, followed by one JSON object per recorded year.
+- `overview.json` — Persistent information about historical entities and their lifespans.
 
 ### Directory Naming
 
@@ -106,27 +106,27 @@ Unnamed worlds use numbered directories such as `HistoryBox_0`.
 
 ### annual.jsonl
 
-Contains four major categories:
+Begins with a single `metadata` header identifying the world, name, slot, and last recorded year. Subsequent lines contain four annual categories:
 
 1. `world` — Year and global population by species.
 2. `kingdoms` — Kingdom IDs and owned village IDs.
 3. `villages` — Population, species breakdown, army, loyalty, territory, housing, food, and coins.
 4. `wars` — Cumulative attacker and defender casualties.
 
-Each line represents one recorded year.
+Each line after the header represents one recorded year.
 
-### metadata.json
+### overview.json
 
 Contains six major categories:
 
-1. `world` — Persistent world GUID, name, and save slot.
+1. `metadata` — Persistent world GUID (`id`), name, save slot, and last recorded `year`.
 2. `ages` — Historical world ages and their lifespans.
-3. `kingdoms` — Kingdom identities, founding species, and lifespans.
-4. `villages` — Village identities, founding species, and lifespans.
+3. `kingdoms` — Kingdom identities, initial species (`founding_species`), and observed lifespans.
+4. `villages` — Village identities, initial species (`founding_species`), and observed lifespans.
 5. `wars` — War identities, participants, sides, and involvement intervals.
 6. `alliances` — Alliance identities and kingdom membership intervals.
 
-Metadata is updated when recorded historical information changes.
+Overview information and both metadata headers are updated with every committed observation.
 
 ### Historical Dates
 
@@ -138,13 +138,22 @@ Dates are recorded as:
 
 Historical events that occur entirely while recording is disabled may not be captured.
 
+### Paired file integrity
+
+The first line of annual.jsonl is `{ "metadata": { "id": "GUID", "name": "World name", "slot": 1, "year": 123 } }`. This object exactly matches overview.json.metadata. It occurs only once, before annual observations; annual world.year fields remain unchanged. Every committed observation updates both copies of metadata.year. Viewer rejects mismatched headers or a final observation with a different year.
+
+Both files are staged and flushed before publication. A commit.pending directory with a ready marker permits replay after an interrupted publication. An incomplete pair copied during recording is rejected; pause recording before copying files. Pair publication is recoverable, not a filesystem-wide atomic two-file operation. Rewriting the annual stream uses bounded memory but adds disk I/O as histories grow. Slot assignment and duplication update both headers. Old metadata.json folders are preserved; the updated recorder starts a separate new-format history rather than asserting an unverifiable legacy pairing.
+
+Capture derives kingdom village lists from each active village's owner. Non-civilization or inactive owners are represented as null rather than an unresolved civilization ID. War and alliance memberships exclude inactive civilizations. Missing required measurements, invalid counts, or a changing capture year abort the observation instead of substituting zero. Failed captures are retried; unrecorded gaps retain uncertain transition ranges. A failed commit does not advance in-memory history before the staged pair can be recovered.
+
+These checks cannot reconstruct events that happened between observations, or repair contradictory values already present in older exports. The Viewer retains diagnostics for such records rather than inventing replacements.
+
 ## Compatibility
 
 HistoryBox uses WorldBox's internal C# APIs, which may change between game versions.
 
-The mod is intended to remain platform-independent, but compatibility with Windows, macOS, and Linux should be verified individually.
+The mod is intended to remain platform-independent, but compatibility with Windows, macOS, and Linux should be verified individually. The paired-file recorder has been compiled and exercised with a test harness; its latest changes still require an in-game check against the installed WorldBox version.
 
 ## License
 
 Distributed under the MIT License. See the repository's `LICENSE` file.
-
