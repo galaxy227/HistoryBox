@@ -81,7 +81,7 @@ main[data-view="browser"] .page-head { background: var(--panel); }
 .table-wrap { border: 1px solid var(--line); max-height: 660px; border-radius: 6px; }
 table { border-collapse: separate; border-spacing: 0px; width: 100%; font-size: 0.9rem; white-space: nowrap; }
 th, td { border-bottom: 1px solid var(--line); padding: 14px 16px; font-variant-numeric: tabular-nums; }
-th { position: sticky; top: 0px; z-index: 2; font-size: 0.8rem; font-weight: 700; }
+thead th { position: sticky; top: 0px; z-index: 2; font-size: 0.8rem; font-weight: 700; }
 th button { background: none; border: 0px; box-shadow: none; padding: 0px; min-height: 25px; color: inherit; }
 tbody tr:nth-child(2n) { background: var(--row-stripe); }
 td:first-child { font-weight: 600; }
@@ -395,3 +395,7 @@ html { scroll-padding-top: calc(var(--navigation-height,85px) + 12px); }
 .select-menu [role="option"] { height:36px; line-height:36px; padding:0 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
 .select-menu [role="option"]:hover, .select-menu [aria-selected="true"] { background:var(--hover-surface); }
 .select-menu [aria-disabled="true"] { opacity:.4; cursor:default; }
+
+.warning-group { padding-block: 16px; border-top: 1px solid var(--line); }
+.warning-group h3 { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.warning-group li { overflow-wrap:anywhere; margin-block:8px; }

@@ -1,5 +1,155 @@
-/* Presentation and navigation. Historical calculations live in parser.js. */
+/* Shared palette for the Viewer and root loading page. */
 (function () {
+  'use strict';
+  // EDIT PALETTE HERE: all Viewer colors are defined in this single block.
+  const THEME = {
+    // Vibrant colors are reserved for species data.
+    'human': '#4c8dcb',
+    'elf': '#e0bc49',
+    'orc': '#78ce45',
+    'dwarf': '#cf6767',
+    // Data with no species designation.
+    'global-data': '#ffffff',
+    'entity-data': '#e6e1d5',
+    'comparison-secondary': '#858b93',
+    'comparison-1': '#d0d2d4',
+    'comparison-2': '#a6abb1',
+    'comparison-3': '#787f88',
+    'comparison-4': '#bac0c6',
+    'comparison-5': '#626a75',
+    'unknown-species': '#a6b5b8',
+    'attacker-data': "#e6e1d5",
+    'defender-data': "#967658",
+    // Site surfaces, typography, and controls.
+    'bg': '#101113',
+    'panel': '#1b1e23',
+    'panel2': '#252a31',
+    'line': '#3b424c',
+    'text': '#f0f0ed',
+    'muted': '#b0b5bd',
+    'accent': '#d3d9e1',
+    'neutral-card': '#c3cad3',
+    'gain': "#35cda3",
+    'loss': "#f47797",
+    'sticky-surface': '#171a1ff5',
+    'active-surface': '#363d47',
+    'active-border': '#89929e',
+    'heading-border': '#aeb5bf',
+    'hover-surface': '#343a43',
+    'inset-surface': '#171a1f',
+    'tooltip-surface': '#14171bf5',
+    'tooltip-border': '#69717c',
+    'timeline-surface': '#111316',
+    'link-hover': '#ffffff',
+    // Logo, warnings, and errors.
+    'logo-light': "#9ca4ad",
+    'logo-dark': "#30363d",
+    'logo-shadow': "#13161a",
+    'warning-border': "#655a43",
+    'warning-surface': "#292722",
+    'warning-text': "#c1b9a9",
+    'error-text': "#b39090",
+    // Chart markers, overlays, highlights, and shadows.
+    'selected-year': '#ffffff',
+    'hover-year': '#ffffff60',
+    'chart-gap': "#797d8322",
+    'gap-dark': "#14171abb",
+    'gap-light': "#64686e55",
+    'button-glint': '#ffffff0a',
+    'button-shadow': '#090f1880',
+    'nav-glint': '#ffffff25',
+    'nav-shadow': '#0c1522',
+    'heading-glint': '#ffffff0c',
+    'panel-glint': '#ffffff08',
+    'shadow-soft': '#0002',
+    'shadow-medium': '#0004',
+    'shadow-strong': '#0008',
+    'modal-backdrop': '#0009',
+    'row-stripe': '#ffffff02',
+    'row-hover': '#ffffff04',
+    'bar-border': '#ffffff55',
+    'bar-glint': '#ffffff35',
+    'transparent': '#00000000',
+    'print-paper': '#ffffff',
+    'print-ink': '#000000',
+  };
+  for (const [name, value] of Object.entries(THEME)) document.documentElement.style.setProperty(`--${name}`, value);
+  globalThis.HistoryBoxTheme = Object.freeze(THEME);
+})();
+
+/* Presentation and navigation. Historical calculations live in parser.js. */
+(function initializeViewer() {
+  'use strict';
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initializeViewer,{once:true});return;}
+  if(!document.getElementById('main'))return;
+/* Scrollable select menus keep native select values and change events. */
+(() => {
+  'use strict';
+  let select = null, menu = null, active = 0, prefix = '', typedAt = 0;
+  function close() {
+    if (select) { select.removeAttribute('aria-expanded'); select.removeAttribute('aria-controls'); }
+    menu?.remove(); menu = null; select = null;
+  }
+  function highlight() {
+    for (const row of menu.children) row.setAttribute('aria-selected', String(Number(row.dataset.index) === active));
+    const row=menu.children[active];
+    if(row){if(row.offsetTop<menu.scrollTop)menu.scrollTop=row.offsetTop;else if(row.offsetTop+row.offsetHeight>menu.scrollTop+menu.clientHeight)menu.scrollTop=row.offsetTop+row.offsetHeight-menu.clientHeight;menu.setAttribute('aria-activedescendant',row.id);}
+  }
+  function choose(index, keyboard = false) {
+    const source = select;
+    if (!source || source.options[index].disabled) return;
+    source.selectedIndex = index; close(); if(keyboard)source.focus({preventScroll:true});
+    source.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  function position() {
+    if(!menu || !select)return;
+    const rect=select.getBoundingClientRect();
+    if(!select.isConnected || rect.bottom<0 || rect.top>innerHeight){close();return;}
+    const below=innerHeight-rect.bottom-8,above=rect.top-8,height=Math.min(select.options.length,10)*36+2;
+    const useBelow=below>=Math.min(height,180),space=useBelow?below:above;
+    menu.style.maxHeight=Math.min(height,Math.max(38,space))+'px';
+    menu.style.width=Math.min(innerWidth-16,Math.max(rect.width,220))+'px';
+    menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';
+    menu.style.top=(useBelow?rect.bottom+4:Math.max(8,rect.top-menu.offsetHeight-4))+'px';
+  }
+  function open(source) {
+    close(); select = source; active = Math.max(0, source.selectedIndex);
+    menu = document.createElement('div'); menu.id = 'select-menu'; menu.className = 'select-menu';
+    menu.setAttribute('role','listbox'); menu.tabIndex = 0;
+    menu.setAttribute('aria-label', source.getAttribute('aria-label') || source.labels?.[0]?.textContent.trim() || 'Options');
+    for (const [index, option] of [...source.options].entries()) {
+      const row = document.createElement('div'); row.setAttribute('role','option'); row.id='select-option-'+index;
+      row.dataset.index = index; row.textContent = option.text; row.title = option.text; row.setAttribute('aria-disabled',String(option.disabled));
+      menu.append(row);
+    }
+    document.body.append(menu);
+    position();
+    source.setAttribute('aria-expanded','true'); source.setAttribute('aria-controls',menu.id);
+    menu.focus({preventScroll:true}); highlight();
+    menu.addEventListener('click', e => { const row=e.target.closest('[data-index]');if(row)choose(Number(row.dataset.index)); });
+    menu.addEventListener('keydown', e => {
+      if (e.key==='Escape' || e.key==='Tab') {const source=select;close();source?.focus({preventScroll:true});if(e.key==='Escape')e.preventDefault();return;}
+      if (e.key==='Enter' || e.key===' ') {e.preventDefault();choose(active,true);return;}
+      if (['ArrowDown','ArrowUp','Home','End','PageDown','PageUp'].includes(e.key)) {
+        e.preventDefault();const n=select.options.length;
+        active=e.key==='Home'?0:e.key==='End'?n-1:Math.max(0,Math.min(n-1,active+({ArrowDown:1,ArrowUp:-1,PageDown:10,PageUp:-10}[e.key])));
+        highlight();return;
+      }
+      if(e.key.length===1){prefix=performance.now()-typedAt>700?'':prefix;prefix+=e.key.toLowerCase();typedAt=performance.now();const found=[...select.options].findIndex(o=>o.text.toLowerCase().startsWith(prefix));if(found>=0){active=found;highlight();}}
+    });
+  }
+  document.addEventListener('pointerdown', e => {
+    const source=e.target.closest('select');
+    if(source && !source.disabled && !source.multiple){e.preventDefault();if(source===select)close();else open(source);}
+    else if(menu && !menu.contains(e.target)) close();
+  },true);
+  document.addEventListener('click',e=>{if(e.target.closest('select')){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('keydown',e=>{if(e.target.matches('select') && !e.target.disabled && ['Enter',' ','ArrowDown','ArrowUp','F4'].includes(e.key)){e.preventDefault();open(e.target);}},true);
+  document.addEventListener('scroll',e=>{if(menu && e.target!==menu && !menu.contains(e.target))position();},true);
+  window.addEventListener('resize',close);
+  window.addEventListener('hashchange',close);
+})();
+
   'use strict';
   const THEME = HistoryBoxTheme;
   const H = HistoryBox, $ = id => document.getElementById(id);
@@ -11,12 +161,12 @@
   const entityColor = (type,id) => type === 'world' ? THEME['global-data'] : colors[data?.entity(type,id)?.founding_species || data?.entity(type,id)?.species] || THEME['entity-data'];
   const metricColor = metric => colors[metric] || THEME['global-data'];
   const typeLabel = type => type.charAt(0).toUpperCase() + type.slice(1);
-  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', kill_change:'Kill change', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliance memberships', army: 'Army', territory: 'Territory', houses: 'Houses', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', houses_per_resident: 'Houses / resident', attacker_deaths: 'Attacker casualties', defender_deaths: 'Defender casualties', total_deaths: 'Casualties', change_total_deaths: 'Casualty change', change_attacker_deaths: 'Attacker casualty change', change_defender_deaths: 'Defender casualty change', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Recorded participation transitions', duration: 'Duration', owners: 'Distinct known owners', ownership_changes: 'Observed owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Recorded owner', latest_year: 'Last casualty observation' };
+  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliances', army: 'Army', territory: 'Territory', houses: 'Houses', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', houses_per_resident: 'Houses / resident', attacker_deaths: 'Attacker casualties', defender_deaths: 'Defender casualties', total_deaths: 'Casualties', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Membership changes', duration: 'Lifespan', owners: 'Distinct known owners', ownership_changes: 'Observed owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Kingdom', latest_year: 'Last casualty observation' };
   function label(metric) {
     if (metric === 'wars_observed') return 'Wars';
     if (labels[metric]) return labels[metric];
-    if (metric.startsWith('peak_')) return `Lifetime peak ${label(metric.slice(5)).toLowerCase()}`;
-    if (metric.startsWith('latest_')) return `Latest recorded ${label(metric.slice(7)).toLowerCase()}`;
+    if (metric.startsWith('peak_')) return `Peak ${label(metric.slice(5)).toLowerCase()}`;
+    if (metric.startsWith('latest_')) return `Latest ${label(metric.slice(7)).toLowerCase()}`;
     if (metric.endsWith('_share')) return `${label(metric.slice(0, -6))} proportion`;
     return metric.charAt(0).toUpperCase() + metric.slice(1).replaceAll('_', ' ');
   }
@@ -24,11 +174,7 @@
   const format = (v, metric = '') => H.numeric(v) ? percent(metric) ? `${(v * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
   const date = (v, qualify = true) => v == null ? '—' : (qualify && H.boundary(v)?.exact === false ? 'Observed ' : '') + String(v);
   // Unavailable values are smaller than every numeric value, in either sort direction.
-  function compareValues(a, b, direction = 1) {
-    const missing = v => v == null || v === '—' || (typeof v === 'number' && !Number.isFinite(v));
-    if (missing(a) || missing(b)) return (missing(a) === missing(b) ? 0 : missing(a) ? -1 : 1) * direction;
-    return H.compare(a, b, direction);
-  }
+  const compareValues = H.compare;
   let data = null, year = null, age = null, customWindow = false, windowStart = null, windowEnd = null, renderToken = 0;
   const requestedHash = location.hash;
   let displayedHash = location.hash;
@@ -121,10 +267,20 @@
     });
   }
   function stopPlayback() { clearTimeout(playback); playback = null; $('play').textContent = '▶'; $('play').setAttribute('aria-label','Play history'); $('play').setAttribute('aria-pressed','false'); }
+  let pointerHeld = false;
+  document.addEventListener('pointerdown',()=>{pointerHeld=true;},true);
+  const releaseInteraction=()=>setTimeout(()=>{pointerHeld=false;},0);
+  document.addEventListener('pointerup',releaseInteraction,true);
+  document.addEventListener('pointercancel',releaseInteraction,true);
+  window.addEventListener('blur',()=>{pointerHeld=false;});
+  function interactionActive() {
+    return pointerHeld || !!document.querySelector('#select-menu') || document.activeElement?.matches('input:not([type="range"]):not([type="checkbox"]),textarea,[contenteditable="true"]');
+  }
   function play() {
     clearTimeout(playback);
     $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label','Pause history'); $('play').setAttribute('aria-pressed','true');
     playback = setTimeout(() => {
+      if(interactionActive()){play();return;}
       const ys = scopeYears();
       if (!ys.length) { stopPlayback(); return; }
       selectYear(ys[(ys.indexOf(year) + 1) % ys.length], true); play();
@@ -152,7 +308,7 @@
   }
   function link(type, id, text) {
     const entity = data.entity(type, id);
-    return entity ? `<a class="entity-link" data-tip="${esc(`${date(entity.start_year)} → ${date(entity.end_year)}`)}" style="--series:${entityColor(type, id)}" href="#/${singular(type)}/${encodeURIComponent(id)}">${entityIcon(type)}${esc(text ?? entity.name ?? `#${id}`)}</a>` : `<span title="Unresolved recorded reference">${esc(text ?? `Unknown ${singular(type)} #${id}`)}</span>`;
+    return entity ? `<a class="entity-link" data-tip="${esc(`${date(entity.start_year)} → ${date(entity.end_year)}`)}" style="--series:${entityColor(type, id)}" href="#/${singular(type)}/${encodeURIComponent(id)}">${entityIcon(type)}${esc(text ?? entity.name ?? `#${id}`)}</a>` : `<span title="Entity unavailable">${esc(text ?? `Unknown ${singular(type)} #${id}`)}</span>`;
   }
   function ageName(index) {
     const a = data.ages[index]; if (!a) return 'All ages';
@@ -196,7 +352,7 @@
     const years = scopeYears();
     $('year-label').textContent = year === null ? '—' : `Year ${year}`;
     $('year').min = years[0] ?? 0; $('year').max = years.at(-1) ?? 1; $('year').value = year ?? 0;
-    $('year').disabled = !years.length; $('year').setAttribute('aria-valuetext', year === null ? 'No confident observation in this age' : `Recorded year ${year}`);
+    $('year').disabled = !years.length; $('year').setAttribute('aria-valuetext', year === null ? 'No observation in this window' : `Recorded year ${year}`);
     const index = years.indexOf(year);
     $('previous').disabled = index <= 0; $('next').disabled = index < 0 || index === years.length - 1;
     $('age').value = customWindow ? 'custom' : age === null ? 'all' : String(age);
@@ -245,8 +401,8 @@
     ];
     return groups.map(([name,metrics]) => cards(snapshot,metrics,previous,previousYear,{type,id},name)).join('');
   }
-  function staticSummary(values, groups) {
-    return '<div class="static-summary">' + groups.map(([title, metrics]) => `<section><h4>${esc(title)}</h4><dl>${metrics.map(m => `<div><dt>${esc(label(m))}</dt><dd>${format(values[m],m)}</dd></div>`).join('')}</dl></section>`).join('') + '</div>';
+  function staticSummary(values, groups, changes = false) {
+    return '<div class="static-summary">' + groups.map(([title, metrics]) => `<section><h4>${esc(title)}</h4><dl>${metrics.map(m => `<div><dt>${esc(label(m))}</dt><dd${changes ? ` style="color:${values[m] > 0 ? THEME.gain : values[m] < 0 ? THEME.loss : THEME['global-data']}"` : ''}>${format(values[m],m)}</dd></div>`).join('')}</dl></section>`).join('') + '</div>';
   }
   function staticBar(value, maximum) {
     return H.numeric(value) && value >= 0 && maximum > 0 ? '<span class="static-bar" aria-hidden="true"><i style="width:'+Math.min(100,value/maximum*100)+'%"></i></span>' : '';
@@ -439,16 +595,18 @@
         const title = `${r.name}: ${date(interval.start_year)} → ${date(interval.end_year)}${interval.side ? ` · ${interval.side}` : ''}${interval.observed ? ' · observed ownership only' : ''}`;
         return `<span class="interval${active ? ' active' : ''}${interval.end_year === null ? ' open' : ''}" style="--series:${color};left:${Math.min(99.75,pos(a.hi))}%;width:${Math.max(.25, pos(b?.lo ?? hi) - pos(a.hi))}%" aria-label="${esc(title)}"></span>${[a, b].filter(v => v && !v.exact).map(v => `<span class="interval uncertain" style="--series:${color};left:${pos(v.lo)}%;width:${pos(v.hi) - pos(v.lo)}%" aria-label="${esc(title)} · uncertain boundary"></span>`).join('')}`;
       }).join('');
-      return `<div class="timeline-row"><span>${id === 'ages' ? ageLink(r.id, r.name) : r.type ? link(r.type, r.id, r.name) : esc(r.name)}</span><div class="timeline-track" data-track="${trackId}" tabindex="0" role="slider" aria-label="${esc(r.name)} year" aria-valuemin="${lo}" aria-valuemax="${hi}" aria-valuenow="${year ?? lo}">${bars}${gaps}<span class="track-hover" hidden></span>${year !== null ? `<span class="year-marker" style="left:${pos(year)}%"></span>` : ''}</div></div>`;
+      return `<div class="timeline-row"><span>${id === 'ages' ? ageLink(r.id, r.name) : r.role ? esc(label(r.role)) + (r.id == null ? '' : ' of ' + link(r.type,r.id)) : r.type ? link(r.type, r.id, r.name) : esc(r.name)}</span><div class="timeline-track" data-track="${trackId}" tabindex="0" role="slider" aria-label="${esc(r.name)} year" aria-valuemin="${lo}" aria-valuemax="${hi}" aria-valuenow="${year ?? lo}">${bars}${gaps}<span class="track-hover" hidden></span>${year !== null ? `<span class="year-marker" style="left:${pos(year)}%"></span>` : ''}</div></div>`;
     }).join('');
     const spaceId = id + ':space';
     timelineViews.set(spaceId, { row: { name: 'Year', intervals: [] }, lo, hi, years: (id === 'ages' ? data.years : scopeYears()).filter(y => y >= lo && y <= hi) });
     const space = `<div class="timeline-row timeline-space"><span></span><div class="timeline-track" data-track="${spaceId}" aria-label="Select year in timeline" tabindex="0" role="slider" aria-valuemin="${lo}" aria-valuemax="${hi}" aria-valuenow="${year ?? lo}">${gaps}<span class="track-hover" hidden></span>${year !== null ? `<span class="year-marker" style="left:${pos(year)}%"></span>` : ''}</div></div>`;
     return `${controls}<div class="axis"><span>${lo}</span><span>${hi}</span></div><div class="timeline-scroll" data-scroll="${id}"><div class="timeline-content">${content}${space}</div></div>`;
   }
-  function rankings(type, metric) {
-    const rows = data.rankings(type, year, metric), max = rows[0]?.value || 1;
-    return '<div class="ranking-scroll" data-scroll="ranking-' + type + '">' + (rows.map(r => `<div class="ranking" data-tip="${esc(r.entity.name + ': ' + format(r.value, metric))}"><span>${r.rank}. ${link(type, r.entity.id)}</span><span class="ranking-bar" style="--series:${entityColor(type, r.entity.id)};width:${Math.max(0, r.value / max * 100)}%"></span><strong>${format(r.value, metric)}</strong></div>`).join('') || '<p class="empty">—</p>') + '</div>';
+  function rankings(type, metric, ids = null) {
+    const rows = data.rankings(type, year, metric).filter(r=>!ids || ids.has(String(r.entity.id))), max = rows[0]?.value || 1;
+    let rank=0, previous;
+    const ranked = rows.map((r,i)=>{if(r.value!==previous)rank=i+1;previous=r.value;return {...r,rank};});
+    return '<div class="ranking-scroll" data-scroll="ranking-' + type + '">' + (ranked.map(r => `<div class="ranking"><span>${r.rank}. ${link(type, r.entity.id)}</span><span class="ranking-bar" data-tip="${esc(r.entity.name + ': ' + format(r.value, metric))}" style="--series:${entityColor(type, r.entity.id)};width:${Math.max(0, r.value / max * 100)}%"></span><strong>${format(r.value, metric)}</strong></div>`).join('') || '<p class="empty">—</p>') + '</div>';
   }
   let namedEntities = [];
   function references(text, primary = null) {
@@ -513,16 +671,15 @@
     const snapshot = data.snapshot('world', '', year), previousYear = data.years[data.yearIndex.get(year) - 1], previous = data.snapshot('world', '', previousYear);
     let ageContent = '';
     {
-      const stats = data.period(age), a = data.ages[age] || { name: 'All ages', start_year: data.years[0], end_year: data.years.at(-1) };
-      if (age === null) for (const t of ['kingdoms', 'villages']) stats[t + '_ended'] = data.catalog(t).filter(e => { const b = H.boundary(e.end_year); return b && b.lo >= data.years[0] && b.hi <= data.years.at(-1); }).length;
-      const periodCards = { population_change: stats.population.change, period_peak_population: stats.population.peak?.value, kingdoms_observed: stats.kingdoms_observed, kingdoms_ended: stats.kingdoms_ended, villages_observed: stats.villages_observed, villages_ended: stats.villages_ended, wars_observed: stats.wars_observed, alliances_observed: stats.alliances_observed, tracked_characters: stats.tracked_characters };
-      ageContent = section('Ages', `<div class="panel age-analysis">
-<h3 class="age-title">${ageLink(age, ageName(age))} <span>· ${esc(date(a.start_year))} → ${esc(date(a.end_year))}</span></h3>${stats.years.length ? staticSummary(periodCards, [['Population', ['population_change','period_peak_population']], ['Civilizations', ['kingdoms_observed','kingdoms_ended','villages_observed','villages_ended']], ['History', ['wars_observed','alliances_observed','tracked_characters']]]) : '<p class="warning">No recorded observation can confidently be assigned to this age.</p>'}
+      const stats = data.period(age,scopeYears(),range()), a = {start_year:range()[0],end_year:range()[1]};
+      const periodCards = stats.changes;
+      ageContent = section('Summary', `<div class="panel age-analysis">
+<h3 class="age-title">${customWindow ? 'Custom' : esc(ageName(age))} <span>· ${esc(date(a.start_year))} → ${esc(date(a.end_year))}</span></h3>${stats.years.length ? staticSummary(periodCards, [['Population change', ['population',...H.SPECIES]], ['Entity change', H.TYPES]], true) : '<p class="warning">No observations in this window.</p>'}
 
 </div>`);
     }
     const observationMetric = worldMetrics.includes(pref('world-observations-metric','army')) ? pref('world-observations-metric','army') : 'army';
-    const observations = panel('Historical observations',chart([{name:'Global',points:worldSeries(observationMetric)}],observationMetric),selector('world-observations-metric','Measure',worldMetrics,observationMetric));
+    const observations = panel('Historical observations',chart([{name:label(observationMetric),points:worldSeries(observationMetric)}],observationMetric),selector('world-observations-metric','Measure',worldMetrics,observationMetric));
     return `<div class="page-head">
 <div>
 
@@ -545,7 +702,12 @@
     if (year === null || !start?.exact || year < start.lo || (end && year >= end.lo)) return null;
     return year - start.lo;
   }
+  function entityDuration(type,id) {
+    const observed=type==='alliances' ? data.years.filter(y=>data.snapshot(type,id,y)) : data.history(type,id).map(p=>p.year), end=H.boundary(data.entity(type,id)?.end_year);
+    return observed.length ? [observed[0],Math.min(data.years.at(-1),Math.max(observed.at(-1),end?.hi ?? observed.at(-1)))] : null;
+  }
   function entityPage(type, id) {
+    const durationWindow = entityDuration(type,id);
     const entity = data.entity(type, id);
     if (!entity) return '<h1>Record not found</h1><p>This entity is not in the loaded metadata.</p><a href="#/overview">Return to overview</a>';
     const snapshot = data.snapshot(type, id, year), previousYear = data.years[data.yearIndex.get(year) - 1], previous = data.snapshot(type, id, previousYear);
@@ -582,7 +744,7 @@
       ? ['wars','alliances'].map(t => relationshipPanel(typeLabel(t), intervals.filter(r => r.type === t), relationshipRecords.filter(r => r.type === t), 'involvement-' + t)).join('')
       : intervals.length ? relationshipPanel('Kingdoms', intervals, relationshipRecords, 'involvement') : '';
     const highlightMetric = metrics.includes(pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population')) ? pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population') : metrics[0], stats = data.stats(type, id, highlightMetric);
-    const historical = `<div class="panel"><div class="controls">${selector(`entity-highlight-${type}`, 'Lifetime measure', metrics, highlightMetric)}</div>${lifetimeHighlights(stats, highlightMetric, metricColor(highlightMetric))}${type === 'alliances' ? staticSummary(summary, [['Membership', ['historical_members','peak_members']], ['Participation', ['intervals','rejoining','participation_changes']]]) : ''}</div>`;
+    const historical = `<div class="panel"><div class="controls">${selector(`entity-highlight-${type}`, 'Measure', metrics, highlightMetric)}</div>${lifetimeHighlights(stats, highlightMetric, metricColor(highlightMetric))}${type === 'alliances' ? staticSummary(summary, [['Membership', ['historical_members','peak_members']], ['Participation', ['intervals','rejoining','participation_changes']]]) : ''}</div>`;
     const chartId = `entity-${type}`, observationOptions = observationMetrics(type), historicalMetric = observationOptions.includes(pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army')) ? pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army') : observationOptions[0];
     const observationSeries = [{name:type === 'wars' ? 'Total' : entity.name,type,id,color:type==='wars' && historicalMetric.startsWith('attacker')?colors.attacker:type==='wars' && historicalMetric.startsWith('defender')?colors.defender:THEME['global-data'],points:data.series(type,id,historicalMetric)}];
     if(type === 'wars' && (!warMetrics.includes(historicalMetric) || historicalMetric==='total_deaths')) for(const side of ['attacker','defender']) observationSeries.push({name:typeLabel(side+'s'),color:colors[side],points:historicalMetric==='total_deaths'?data.series(type,id,side+'_deaths'):data.warSideSeries(id,side,historicalMetric)});
@@ -605,7 +767,7 @@
 <dd>${esc(date(entity.end_year, false))}</dd>
 </div>
 <div>
-<dt>Duration</dt>
+<dt>Lifespan</dt>
 <dd data-number>${H.duration(entity) === null ? '—' : format(H.duration(entity)) + ' years'}</dd>
 </div>${type === 'characters' ? `<div><dt>Species</dt><dd>${cell(entity.species,'species')}</dd></div><div><dt>Gender</dt><dd>${esc(entity.gender ?? '—')}</dd></div>` : ''}${entity.founding_species ? `<div>
 <dt>Founding species</dt>
@@ -617,10 +779,10 @@
 <div>
 <dt>Instigator</dt>
 <dd>${cell(entity.instigator, 'instigator')}</dd>
-</div>` : ''}</dl><div class="controls"><button data-entity-window="${esc(id)}" data-entity-type="${type}">View lifespan</button></div><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
+</div>` : ''}</dl><div class="controls"><button data-entity-window="${esc(id)}" data-entity-type="${type}">View duration</button>${durationWindow ? `<span class="muted">${durationWindow.join(' → ')}</span>` : ''}</div><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
 </div>
 
-</div>${snapshot?.complete === false ? '<p class="warning">Some recorded relationships are uncertain or inconsistent. Unverified values are unavailable; see Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
+</div>${snapshot?.complete === false ? '<p class="warning">Some relationships could not be confirmed. See Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
   }
   function snapshotAssociations(type,id,snapshot) {
     if(type==='villages') {
@@ -636,9 +798,16 @@
     return panel(title,timeline([...rows.values()],type+'-'+id+'-'+field,{filter:false}));
   }
   function characterHistory(id) {
-    const relatives=data.family(id);
+    const relatives=data.family(id), ids=new Set([String(id),...relatives.map(r=>String(r.id))]);
     const family='<div class="table-wrap"><table><thead><tr><th>Relation</th><th>Character</th></tr></thead><tbody>'+relatives.map(r=>'<tr><td>'+esc(r.relationship)+'</td><td>'+link('characters',r.id)+'</td></tr>').join('')+'</tbody></table></div>';
-    return {chronology:observationTimeline('characters',id,'role',null,'Roles')+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdoms')+observationTimeline('characters',id,'village_id','villages','Villages'),family:section('Family','<div class="panel">'+(relatives.length?family:'<p class="empty">—</p>')+'</div>')};
+    const roles=new Map();
+    for(const run of data.observationRuns('characters',id,'office',r=>JSON.stringify([r.role,r.role==='leader'?'villages':'kingdoms',r.role==='leader'?r.village_id:r.kingdom_id])).runs){
+      const [role,type,target]=JSON.parse(run.value), k=run.value;
+      if(!roles.has(k))roles.set(k,{role,type:role?type:null,id:role?target:null,name:role ? label(role)+(target==null?'':' of '+(data.entity(type,target)?.name || '—')):'—',intervals:[]});
+      roles.get(k).intervals.push(run);
+    }
+    const choices=standardMetrics('characters'), metric=choices.includes(pref('family-ranking','level'))?pref('family-ranking','level'):'level';
+    return {chronology:panel('Roles',timeline([...roles.values()],'character-roles-'+id,{filter:false}))+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdoms')+observationTimeline('characters',id,'village_id','villages','Villages'),family:section('Family','<div class="grid">'+panel('Relatives',relatives.length?family:'<p class="empty">—</p>')+panel('Rankings','<p class="ranking-year">Year '+(year ?? '—')+'</p>'+rankings('characters',metric,ids),selector('family-ranking','Measure',choices,metric))+'</div>')};
   }
   function leadershipHistory(type,id) {
     const role=type==='kingdoms'?'king':'leader',field=type==='kingdoms'?'kingdom_id':'village_id',rows=[];
@@ -648,7 +817,7 @@
     }
     let content=panel(type==='kingdoms'?'Kings':'Leaders',timeline(rows,'rulers-'+type+'-'+id));
     if(type==='kingdoms') {
-      const rows=new Map(),history=data.observationRuns(type,id,'capital',(r,y)=>data.records.get(y)?.raw.characters===undefined?null:r.cities?.[0]??null);
+      const rows=new Map(),history=data.observationRuns(type,id,'capital',(r,y)=>data.snapshot(type,id,y)?.capital_id??null);
       for(const r of history.runs){const k=String(r.value);if(!rows.has(k))rows.set(k,{name:r.value==null?'—':data.entity('villages',r.value)?.name||'#'+r.value,type:'villages',id:r.value,intervals:[]});rows.get(k).intervals.push(r);}
       content=panel('Capitals',timeline([...rows.values()],'capitals-'+id))+content;
     }return content;
@@ -846,7 +1015,7 @@
       $('replace').hidden = false; $('diagnostics-button').hidden = false;
       $('diagnostics-button').textContent = `Data notes (${data.warningCount})`;
       $('diagnostics-button').hidden = data.warningCount === 0;
-      $('diagnostics-content').innerHTML = `<p>${data.years.length} observations · ${data.warningCount} warnings.</p><p>Both files have matching world, save-slot, name, and last-year metadata.</p><p>Missing values display as —. Original records are preserved. No historical files leave this browser.</p>${data.warnings.length ? `<ul>${data.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '<p>No validation warnings.</p>'}${data.warningCount > data.warnings.length ? '<p>Only the first 2,000 warnings are displayed.</p>' : ''}`;
+      $('diagnostics-content').innerHTML = '<p>'+format(data.warningCount)+' warnings · '+format(data.warningGroups.size)+' types</p>' + [...data.warningGroups.values()].sort((a,b)=>b.count-a.count).map(g=>'<section class="warning-group"><h3>'+esc(g.title)+' <span class="badge">'+format(g.count)+'</span></h3><p>'+esc(g.description)+'</p><details><summary>Examples</summary><ul>'+g.examples.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul></details></section>').join('') + (data.warningCount ? '' : '<p>No validation warnings.</p>');
       let restored = null;
       if (saved) {
         try { restored = JSON.parse(localStorage.getItem('historybox-view')); } catch {}
@@ -946,7 +1115,7 @@
   });
   $('year').addEventListener('keydown', e => {
     const ys = scopeYears(), index = ys.indexOf(year);
-    if (['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
       e.preventDefault(); const target = e.key === 'Home' ? 0 : e.key === 'End' ? ys.length - 1 : index + (['ArrowLeft', 'ArrowDown'].includes(e.key) ? -1 : 1);
       selectYear(ys[Math.max(0, Math.min(ys.length - 1, target))]);
     }
@@ -958,6 +1127,14 @@
     syncWindow();
   }
   $('age').addEventListener('change', e => selectAge(e.target.value));
+  document.addEventListener('keydown',e=>{
+    if(!data || $('timeline-shell').hidden || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || (e.target.closest('input,textarea,select,[contenteditable],dialog,#select-menu') && !(e.target.id==='year' && ['ArrowUp','ArrowDown'].includes(e.key))))return;
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      e.preventDefault();const ys=scopeYears(),i=ys.indexOf(year);if(ys.length)selectYear(ys[Math.max(0,Math.min(ys.length-1,i+(e.key==='ArrowRight'?1:-1)))]);
+    } else if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+      e.preventDefault();const menu=$('age'),i=Math.max(0,Math.min(menu.options.length-1,menu.selectedIndex+(e.key==='ArrowDown'?1:-1)));selectAge(menu.options[i].value);
+    }
+  });
   function setWindow(e) {
     if (!customWindow) return;
     const [lo,hi] = range(), bounds = rangeBounds(), value = e.target.valueAsNumber;
@@ -992,8 +1169,9 @@
     if (target.dataset.toggle) { preferences.set(target.dataset.toggle, !pref(target.dataset.toggle, false)); render(); }
     if (target.dataset.year) selectYear(target.dataset.year);
     if (target.dataset.entityWindow) {
-      const entity=data.entity(target.dataset.entityType,target.dataset.entityWindow),a=H.boundary(entity.start_year),b=H.boundary(entity.end_year);
-      age=null;customWindow=true;windowStart=a?.lo ?? data.years[0];windowEnd=b?.hi ?? data.years.at(-1);syncWindow();
+      const type=target.dataset.entityType, id=target.dataset.entityWindow;
+      const duration=entityDuration(type,id);
+      if(duration){age=null;customWindow=true;[windowStart,windowEnd]=duration;syncWindow();}
     }
     if (target.dataset.eventYear) { const y = Number(target.dataset.eventYear); if (!scopeYears().includes(y)) { age = null; customWindow = false; windowStart = null; windowEnd = null; } selectYear(y); }
     if (target.dataset.age !== undefined) { e.preventDefault(); selectAge(target.dataset.age); }

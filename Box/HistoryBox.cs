@@ -21,10 +21,17 @@ namespace HistoryBox
         private HistorySession session;
         private SaveSlotTracker tracker;
         private float retryAfter;
+        private bool errorPanelVisible;
+        private int lastRecordedYear = -1;
 
         private void OnGUI()
         {
             float x = Screen.width - 180f;
+            if (errorPanelVisible)
+            {
+                GUI.Box(new Rect(x, 105, 170, 85), "⚠ ERROR\nLast recorded: " + (lastRecordedYear > 0 ? "Year " + lastRecordedYear : "—"));
+                if (GUI.Button(new Rect(x + 10, 155, 150, 25), "Dismiss")) errorPanelVisible = false;
+            }
             GUI.Box(new Rect(x, 10, 170, 85), "HistoryBox");
 
             if (GUI.Button(new Rect(x + 10, 35, 150, 25), "Activator: " + (enabledRecording ? "ON" : "OFF")))
@@ -90,10 +97,13 @@ namespace HistoryBox
                     session.Record(WorldReader.Capture(world, year, session.TrackedCharacterIds));
                 }
 
+                lastRecordedYear = session.LastYear;
                 observedYear = year;
             }
             catch (Exception error)
             {
+                if (session != null) lastRecordedYear = session.LastYear;
+                errorPanelVisible = true;
                 retryAfter = Time.unscaledTime + 5f;
                 Debug.LogError("[HistoryBox] " + error);
             }
@@ -114,6 +124,7 @@ namespace HistoryBox
                 session.Record(WorldReader.Capture(world, year, session.TrackedCharacterIds));
             }
 
+            lastRecordedYear = session.LastYear;
             Debug.Log("[HistoryBox] Recording enabled.");
         }
 
@@ -291,6 +302,7 @@ namespace HistoryBox
                 else
                 {
                     changed |= Lifecycle.Open(entry);
+                    if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
             }
 
@@ -337,6 +349,7 @@ namespace HistoryBox
                 else
                 {
                     changed |= Lifecycle.Open(entry);
+                    if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
             }
 
@@ -387,6 +400,7 @@ namespace HistoryBox
                 {
                     if (Convert.ToInt32(entry.StartYear, CultureInfo.InvariantCulture) != state.BirthYear) throw new InvalidDataException("Character birth year changed: " + state.Id);
                     changed |= Lifecycle.Open(entry);
+                    if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
             }
 
@@ -503,6 +517,7 @@ namespace HistoryBox
                 else
                 {
                     changed |= Lifecycle.Open(entry);
+                    if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
 
                 changed |= UpdateWarMembers(entry, state.Participants, year, previous);
@@ -626,6 +641,7 @@ namespace HistoryBox
                 else
                 {
                     changed |= Lifecycle.Open(entry);
+                    if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
 
                 changed |= UpdateAllianceMembers(entry, state.Kingdoms, year, previous);
@@ -955,7 +971,7 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "cities", Order = 2)] public List<long> Cities = new List<long>();
         [DataMember(Name = "king_id", Order = 3)] public long? KingId;
-        public long? CapitalId;
+        public long? CapitalId; // Capture-only: capital-first ordering of cities; not serialized.
         public string Name;
         public string Species;
     }
@@ -1079,12 +1095,10 @@ namespace HistoryBox
             foreach (KingdomAnnual kingdom in record.Kingdoms)
             {
                 kingdom.Cities.Sort();
-                if (kingdom.Cities.Count == 0) continue;
-                if (!kingdom.CapitalId.HasValue || !kingdom.Cities.Remove(kingdom.CapitalId.Value))
-                {
-                    throw new InvalidDataException("Missing or unrecorded capital of kingdom: " + kingdom.Id);
-                }
-                kingdom.Cities.Insert(0, kingdom.CapitalId.Value);
+                // The game may own villages before its capital behavior runs.
+                if (kingdom.CapitalId.HasValue && kingdom.Cities.Remove(kingdom.CapitalId.Value))
+                    kingdom.Cities.Insert(0, kingdom.CapitalId.Value);
+                else kingdom.CapitalId = null;
             }
             foreach (WarAnnual war in record.Wars) war.Participants.RemoveAll(p => !kingdoms.ContainsKey(p.KingdomId));
             foreach (AllianceState alliance in record.Alliances) alliance.Kingdoms.RemoveAll(id => !kingdoms.ContainsKey(id));
@@ -1181,7 +1195,7 @@ namespace HistoryBox
                     Name = Reader.Name(kingdom),
                     Species = Reader.Text(Reader.Call(kingdom, "getFounderSpecies"), "id"),
                     KingId = LiveId(Reader.Member(kingdom, "king")),
-                    CapitalId = Reader.Get(kingdom, "capital") == null ? (long?)null : Reader.Id(Reader.Get(kingdom, "capital"))
+                    CapitalId = LiveId(Reader.Member(kingdom, "capital"))
                 };
 
                 foreach (object city in Reader.Enumerate(Reader.Require(kingdom, "cities")))

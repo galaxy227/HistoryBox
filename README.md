@@ -1,21 +1,45 @@
 # Welcome to HistoryBox
 
-Record your WorldBox world's history, then explore its people, kingdoms, villages, wars, and alliances.
+Record your WorldBox world's history, then explore its people, kingdoms, villages, wars, and alliances in your browser.
 
-1. **Install:** Download the HistoryBox release for your computer from [Releases](https://github.com/galaxy227/HistoryBox/releases). Close WorldBox and follow the release's installation instructions. On Windows, place `HistoryBox.dll` in the game's `worldbox_Data/StreamingAssets/Mods/` folder. Enable **Experimental Mode** in WorldBox settings and restart.
-2. **Record:** Open your world and switch **Activator ON** in the top-right HistoryBox panel. Play normally. Switch it OFF before copying your history files.
-3. **Find your history:** Open the matching world folder inside `HistoryBox` at the location below. Take **overview.json** and **annual.jsonl** from that same folder.
-4. **Explore:** Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files, and choose **Open world**. Your files stay in your browser.
+## Install
 
-| Computer | Usual history location |
+1. Download your computer's archive from [Releases](https://github.com/galaxy227/HistoryBox/releases): **HistoryBox-Windows.zip**, **HistoryBox-macOS.zip**, or **HistoryBox-Linux.zip**. Extract it to find `HistoryBox.dll`.
+2. Close WorldBox. In Steam, right-click **WorldBox → Manage → Browse local files** to open the game folder. For a non-Steam copy, open its installation folder.
+3. Copy `HistoryBox.dll` into the folder for your computer:
+
+   | Computer | Where to place the file |
+   | --- | --- |
+   | Windows | Open `worldbox_Data`, then `StreamingAssets`, then `mods`. |
+   | macOS | Right-click `worldbox.app` → **Show Package Contents**, then open `Contents/Resources/Data/StreamingAssets/mods`. |
+   | Linux | Open `worldbox_Data`, then `StreamingAssets`, then `mods`. |
+
+   Use the existing `mods` folder, keeping its capitalization; create it if absent.
+4. Open WorldBox, enable **Experimental Mode** in Settings, then restart the game. These steps apply to all three platforms.
+
+## Record
+
+Open your world and switch **Activator ON** in the top-right HistoryBox panel. Play normally. Switch it **OFF** before copying your history files.
+
+If an **ERROR** panel appears, its last-recorded year shows the latest successful recording. Recording keeps retrying; you can dismiss the panel, and another error will bring it back.
+
+## Find Your History
+
+Open your world's folder inside the location below. Copy **overview.json** and **annual.jsonl** together from that same folder.
+
+| Computer | How to open the history location |
 | --- | --- |
-| Windows | `%USERPROFILE%\AppData\LocalLow\mkarpenko\WorldBox\HistoryBox` |
-| macOS | `~/Library/Application Support/mkarpenko/WorldBox/HistoryBox` |
-| Linux | `~/.config/unity3d/mkarpenko/WorldBox/HistoryBox` |
+| Windows | Press **Win+R**, paste `%USERPROFILE%\AppData\LocalLow\mkarpenko\WorldBox\HistoryBox`, then press Enter. |
+| macOS | In Finder, choose **Go → Go to Folder**, then enter `~/Library/Application Support/mkarpenko/WorldBox/HistoryBox`. |
+| Linux | In your file manager, press **Ctrl+L** and enter `~/.config/unity3d/mkarpenko/WorldBox/HistoryBox`. |
+
+## Explore
+
+Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files from the same recording, and choose **Open world**. Your files stay in your browser.
 
 ## Notes
 
-- Recording must be ON to capture history; earlier years cannot be recovered. **Duplicator ON** keeps a separate history when saving into another slot.
-- Use your platform's release instructions; mod support and installation locations can vary. Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations can use a different [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).
+- Recording starts when Activator is ON; earlier years cannot be recovered. **Duplicator ON** keeps a separate history when saving into another slot.
 - Downloaded this repository? Open its `index.html` in a modern browser to use the Viewer locally.
+- Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations may use another [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).
 - More detail: [recording and installation](Box/README.md) · [using the Viewer](Viewer/README.md).

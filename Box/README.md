@@ -2,7 +2,7 @@
 
 HistoryBox is a C# mod for [WorldBox](https://www.superworldbox.com/) that records historical world data into external JSON files.
 
-The mod tracks world population, kingdoms, villages, wars, alliances, and historical changes over time.
+The mod tracks world population, kingdoms, villages, characters, wars, alliances, and historical changes over time.
 
 ## Requirements
 
@@ -35,15 +35,15 @@ Do not distribute proprietary WorldBox or Unity assemblies with the project.
 
 ## Installation
 
-1. Locate the WorldBox installation directory.
-2. Copy `HistoryBox.dll` into:
+Download the platform archive described in the [getting-started guide](../README.md), extract it, and copy its managed `HistoryBox.dll` into the native loader's `mods` directory:
 
-   `worldbox_Data/StreamingAssets/Mods/`
+| Platform | Directory relative to the game installation |
+| --- | --- |
+| Windows | `worldbox_Data/StreamingAssets/mods/` |
+| macOS | `worldbox.app/Contents/Resources/Data/StreamingAssets/mods/` |
+| Linux | `worldbox_Data/StreamingAssets/mods/` |
 
-3. Enable Experimental Mode in WorldBox settings.
-4. Restart WorldBox.
-
-Installation paths and native mod-loader support may vary by operating system and game version.
+Use the existing directory's capitalization. Enable Experimental Mode in WorldBox settings and restart. All three archives contain a managed DLL; no native `.so` or `.dylib` conversion is needed. Release builds should be checked against each platform's installed game assemblies and tested in-game before publication. The installation layout follows the [native-loader entry point documented by WorldBoxOpenMods](https://github.com/WorldBoxOpenMods/ModLoader) and its [platform installation guide](https://worldboxopenmods.gitbook.io/mod-tutorial-en/player-manual/install); HistoryBox itself does not require that additional loader.
 
 ## Controls
 
@@ -60,6 +60,10 @@ Enables or disables historical recording.
 - Automatically disables when switching worlds.
 
 Only observed years are recorded. Missing years are not reconstructed.
+
+### Recording errors
+
+A capture or storage exception opens a separate panel below the controls, showing **⚠ ERROR**, the last successfully committed year, and **Dismiss**. Detailed errors remain in the game log. The panel does not switch Activator off: recording retries after five seconds, and the displayed year advances after a successful commit. Dismiss hides the panel until another error occurs. An em dash is shown when no observation has been committed.
 
 ### Duplicator
 
@@ -109,7 +113,7 @@ Unnamed worlds use numbered directories such as `HistoryBox_0`.
 Begins with a single `metadata` header identifying the world, name, slot, and last recorded year. Subsequent lines contain five annual categories:
 
 1. `world` — Year and global population by species.
-2. `kingdoms` — Kingdom IDs, capital-first owned village IDs, and the current `king_id` (or null).
+2. `kingdoms` — Kingdom IDs, owned village IDs (capital first when available), and the current `king_id` (or null).
 3. `villages` — Population, species breakdown, army, loyalty, territory, housing, food, coins, and the current `leader_id` (or null).
 4. `characters` — Current kingdom, village, confirmed office or occupation, level, personal coins, and cumulative kills.
 5. `wars` — Cumulative attacker and defender casualties.
@@ -122,9 +126,10 @@ Contains seven major categories:
 
 1. `metadata` — Persistent world GUID (`id`), name, save slot, and last recorded `year`.
 2. `ages` — Historical world ages and their lifespans.
-3. `kingdoms` — Kingdom identities, initial species (`founding_species`), and observed lifespans.
-4. `villages` — Village identities, initial species (`founding_species`), and observed lifespans.
-5. `wars` — War identities, participants, sides, and involvement intervals.
+3. `kingdoms` — Kingdom identities, founding species (`founding_species`), and observed lifespans.
+4. `villages` — Village identities, founding species (`founding_species`), and observed lifespans.
+5. `characters` — Identities, species, gender, birth/end years, and cumulative parent, sibling, and child relationships (`p`, `s`, `c`).
+6. `wars` — War identities, participants, sides, and involvement intervals.
 7. `alliances` — Alliance identities and kingdom membership intervals.
 
 Overview information and both metadata headers are updated with every committed observation.
@@ -135,7 +140,7 @@ Dates are recorded as:
 
 - `150` — An observed year.
 - `"100-150"` — An uncertain date between two recorded observations.
-- `null` — An entity or involvement interval that remains active.
+- `null` — An open end: no ending has been recorded.
 
 Historical events that occur entirely while recording is disabled may not be captured.
 
@@ -155,6 +160,12 @@ HistoryBox uses WorldBox's internal C# APIs, which may change between game versi
 
 The mod is intended to remain platform-independent, but compatibility with Windows, macOS, and Linux should be verified individually. The paired-file recorder has been compiled and exercised with a test harness; its latest changes still require an in-game check against the installed WorldBox version.
 
+## Names and Lifespans
+
+Later observations replace each entity's catalog name with its latest observed name. All historical references use that one current name; rename events and additional schema fields are not recorded. Annual observations refer to entities by ID, so old annual rows need no name rewrite. The paired world headers likewise retain the current observed world name.
+
+Each entity retains one start/end pair. If an ID unexpectedly reappears, its end is cleared while it is present and set again when it disappears. The original start remains unchanged. No missing observations are inferred and no additional lifespan intervals are introduced.
+
 ## License
 
 Distributed under the MIT License. See the repository's `LICENSE` file.
@@ -165,4 +176,8 @@ Characters enroll through actual `Kingdom.king` or `City.leader` appointments an
 
 The recorder rejects duplicate or unverified rulers, missing appointed characters, and disagreement between a character and their home village owner before committing either file. Annual `king_id` and `leader_id` support independent Viewer validation. A null appointment means no observed live office holder. Validation failures leave the previous paired files intact. Historical exports made with the former profession/save-ID implementation cannot be reconstructed reliably from those files alone; the Viewer reports and withholds contradictory derived values without changing source records.
 
-The revised recorder compiles against the locally installed WorldBox/Unity assemblies. The harness tests stale save IDs, stale profession flags, actual appointments, and paired-file failure recovery; an in-game run remains required to validate capture timing on each supported game version.
+The revised recorder compiles against the locally installed WorldBox/Unity assemblies. The harness tests stale save IDs, stale profession flags, actual appointments, missing-capital handling, unchanged output fields, and paired-file failure recovery; an in-game run remains required to validate capture timing on each supported game version.
+
+## Capital transitions
+
+WorldBox can temporarily have villages without a valid capital during creation or ownership transitions. This does not abort recording. The recorder retains every owned village in the existing `cities` array, moving the capital to the first position when it is available. Without a valid capital, villages retain their sorted order. No new output fields are added.

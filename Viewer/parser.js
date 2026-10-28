@@ -43,8 +43,8 @@
     return a?.exact && b?.exact && b.lo >= a.lo ? b.lo - a.lo : null;
   }
   function compare(a, b, direction = 1) {
-    if (a === null || a === undefined) return b === null || b === undefined ? 0 : 1;
-    if (b === null || b === undefined) return -1;
+    const missing = v => v == null || v === '—' || (typeof v === 'number' && !Number.isFinite(v));
+    if (missing(a) || missing(b)) return (missing(a) === missing(b) ? 0 : missing(a) ? -1 : 1) * direction;
     if (numeric(a) && numeric(b)) return (a - b) * direction;
     return String(a).localeCompare(String(b), undefined, { numeric: true }) * direction;
   }
@@ -57,6 +57,7 @@
       this.world = metadata.metadata;
       this.warnings = [];
       this.warningCount = 0;
+      this.warningGroups = new Map();
       this.entities = new Map();
       this.records = new Map();
       this.observations = new Map();
@@ -129,7 +130,27 @@
         }
       }
     }
-    warn(message) { this.warningCount++; if (this.warnings.length < 2000) this.warnings.push(message); }
+    warn(message) {
+      this.warningCount++;
+      this.warnings.push(message);
+      const categories = [
+        [/multiple claimed rulers/, 'Conflicting rulers', 'More than one character claims the same office. Rulers are withheld; check the recorder’s appointment data.'],
+        [/kingdom disagrees with home village/, 'Conflicting affiliations', 'A character’s kingdom differs from their home village’s kingdom. The conflicting affiliation and office are withheld.'],
+        [/appointment|appointed/, 'Unverified appointments', 'Ruler appointments are missing or disagree with character records. Re-record with the current Box to obtain verified appointments.'],
+        [/ownership|observed owner|cities array/, 'Conflicting village ownership', 'Village ownership and kingdom village lists disagree or are incomplete. Check both records for the affected year.'],
+        [/reference|not present in this observation/, 'Missing references', 'A referenced entity is absent. Check that overview and annual records contain the referenced entity.'],
+        [/family|parent .*born/, 'Family inconsistencies', 'Family links or birth dates disagree. Check parent, child and sibling references.'],
+        [/lifespan|boundary|start_year|involvement|side/, 'Timeline inconsistencies', 'Dates or membership intervals are missing, contradictory, or outside an entity’s lifespan. Check the corresponding overview entries.'],
+        [/decreased/, 'Decreasing cumulative counts', 'A cumulative count decreased between observations. Check the source records for a reset or recording error.'],
+        [/population|army exceeds/, 'Population inconsistencies', 'Population, species or army totals disagree. Check the corresponding annual observation.'],
+        [/invalid or missing|observations are missing|unknown species|unknown role/, 'Missing or invalid values', 'An expected value is absent or invalid. Unavailable values display as an em dash. Check the listed source fields.']
+      ];
+      const category = categories.find(([pattern]) => pattern.test(message)) || [null, 'Other inconsistencies', 'Check the source records described below.'];
+      let group = this.warningGroups.get(category[1]);
+      if (!group) { group = { title:category[1], description:category[2], count:0, examples:[] }; this.warningGroups.set(category[1],group); }
+      group.count++;
+      if (group.examples.length < 3 && !group.examples.includes(message)) group.examples.push(message);
+    }
     validateInterval(interval, label) {
       if (!interval || typeof interval !== 'object') throw new Error(`${label}: invalid interval object.`);
       const a = boundary(interval.start_year), b = boundary(interval.end_year);
@@ -222,10 +243,10 @@
       this.gaps = this.years.slice(1).flatMap((y, i) => y > this.years[i] + 1 ? [[this.years[i], y]] : []);
       for (const histories of this.observations.values()) for (const history of histories.values()) history.sort((a, b) => a.year - b.year);
       for(const e of this.catalog('characters')) for(const parent of e.p||[]){const p=this.entity('characters',parent);if(p && p.start_year>=e.start_year)this.warn('Character '+e.id+': parent '+parent+' was not born before this character.');}
-      for (const [id,history] of this.observations.get('characters')) for(let i=1;i<history.length;i++) if(numeric(history[i].record.kills)&&numeric(history[i-1].record.kills)&&history[i].record.kills<history[i-1].record.kills) this.warn('Character '+id+': cumulative kills decreased; change unavailable.');
+      for (const [id,history] of this.observations.get('characters')) for(let i=1;i<history.length;i++) if(numeric(history[i].record.kills)&&numeric(history[i-1].record.kills)&&history[i].record.kills<history[i-1].record.kills) this.warn('Character '+id+': cumulative kills decreased; check the source observations.');
       for (const [id, history] of this.observations.get('wars')) {
         for (let i = 1; i < history.length; i++) for (const field of ['attacker_deaths', 'defender_deaths']) {
-          if (history[i].record[field] < history[i - 1].record[field]) this.warn(`War ${id}: ${field} decreased between ${history[i - 1].year} and ${history[i].year}; casualty change unavailable.`);
+          if (history[i].record[field] < history[i - 1].record[field]) this.warn(`War ${id}: ${field} decreased between ${history[i - 1].year} and ${history[i].year}; check the source observations.`);
         }
       }
       return this;
@@ -299,9 +320,6 @@
       } else if (type === 'characters' && item) {
         out={kingdom_id:item.kingdom_id,village_id:item.village_id,role:item.role,complete:!item.affiliation_uncertain};
         for(const field of ['level','coins','kills']) out[field]=this.validStat(item[field]);
-        const h=this.history(type,id),i=h.findIndex(p=>p.year===year),old=h[i-1];
-        out.kill_change=old && numeric(out.kills) && numeric(old.record.kills) && out.kills>=old.record.kills ? out.kills-old.record.kills : null;
-        out.change_from=old?.year ?? null;
       } else if (type === 'villages' && item) {
         out = { kingdom_id: item.kingdom_id, complete: true };
         [...ADDITIVE, 'loyalty'].forEach(f => { out[f] = this.validStat(item[f], f === 'loyalty'); });
@@ -319,10 +337,6 @@
         out.attackers = members.filter(m => m.status === 'active' && m.side === 'attacker').length;
         out.defenders = members.filter(m => m.status === 'active' && m.side === 'defender').length;
         out.members = members.filter(m => m.status === 'active').length;
-        const history = this.history(type, id), index = history.findIndex(p => p.year === year), previous = history[index - 1];
-        out.change_from = previous?.year ?? null;
-        for (const field of ['attacker_deaths', 'defender_deaths']) out[`change_${field}`] = previous && numeric(out[field]) && numeric(previous.record[field]) && out[field] >= previous.record[field] ? out[field] - previous.record[field] : null;
-        out.change_total_deaths = sum([out.change_attacker_deaths, out.change_defender_deaths]);
       } else if (type === 'alliances' && intervalStatus(this.entity(type, id), year) === 'active') {
         out = this.participantSnapshot(type,id,year);
       }
@@ -337,7 +351,7 @@
     series(type, id, metric) {
       const k = `${type}:${id}:${metric}`;
       if (!this.seriesCache.has(k)) {
-        const points = this.years.map(year => { const snapshot=this.snapshot(type,id,year); return { year, value:number(snapshot?.[metric]), ...(/^(?:change_|kill_change)/.test(metric) ? {from:snapshot?.change_from ?? null} : {}) }; });
+        const points = this.years.map(year => { const snapshot=this.snapshot(type,id,year); return { year, value:number(snapshot?.[metric]) }; });
         boundedSet(this.seriesCache, k, points, 250);
       }
       return this.seriesCache.get(k);
@@ -366,7 +380,6 @@
       }
       return this.rankCache.get(k);
     }
-    rankSeries(type, id, metric) { return this.years.map(year => ({ year, value: this.rankings(type, year, metric).find(r => key(r.entity.id) === key(id))?.rank ?? null })); }
     averageSeries(type, metric) {
       const k = `average:${type}:${metric}`;
       if (!this.seriesCache.has(k)) this.seriesCache.set(k, this.years.map(year => {
@@ -376,31 +389,12 @@
       }));
       return this.seriesCache.get(k);
     }
-    peerSeries(villageId, metric) {
-      const k = `peers:${villageId}:${metric}`;
-      if (!this.seriesCache.has(k)) boundedSet(this.seriesCache, k, this.years.map(year => {
-        const village = this.observed('villages', villageId, year), owner = village?.kingdom_id;
-        const kingdom = owner !== null && owner !== undefined ? this.observed('kingdoms', owner, year) : null;
-        if (!kingdom || this.records.get(year).badOwners.has(key(owner))) return { year, value: null };
-        const ids = kingdom.cities.filter(id => key(id) !== key(villageId));
-        return { year, value: ids.length ? ratio(sum(ids.map(id => this.snapshot('villages', id, year)?.[metric])), ids.length) : null };
-      }), 250);
-      return this.seriesCache.get(k);
-    }
     overlappingAges(type, id) {
       const entity = this.entity(type, id), start = boundary(entity?.start_year), end = boundary(entity?.end_year);
       if (!start) return [];
       return this.ages.filter(age => {
         const a = boundary(age.start_year), b = boundary(age.end_year);
         return a && Math.max(start.hi, a.hi) < Math.min(end?.lo ?? Infinity, b?.lo ?? Infinity, this.years.at(-1) + 1);
-      });
-    }
-    changes(type, id, metric, proportional = false) {
-      const series = this.series(type, id, metric);
-      return series.map((p, i) => {
-        const before = series[i - 1];
-        const delta = before && numeric(before.value) && numeric(p.value) ? p.value - before.value : null;
-        return { year: p.year, from: before?.year ?? null, value: proportional ? ratio(delta, before?.value) : delta };
       });
     }
     relatedNames(type, id, year = null, role = '') {
@@ -441,12 +435,12 @@
         for(const field of current.down||current.side ? ['c'] : ['p','s','c']) for(const next of e[field]||[]) {
           const k=key(next);if(k===cacheKey||!this.entity('characters',k))continue;
           const up=current.up+(field==='p'),down=current.down+(field==='c'),side=current.side||field==='s',visit=k+':'+(down||side?'down':'up');if(seen.has(visit))continue;seen.add(visit);
-          const relationship=side ? up===0&&down===0?'Sibling':up===1&&down===0?'Aunt / uncle':up===1&&down===1?'Cousin':'Extended' : !down ? up===1?'Parent':up===2?'Grandparent':'Extended' : !up ? down===1?'Child':'Extended' : up===1&&down===1?'Sibling':up===2&&down===1?'Aunt / uncle':up===2&&down===2?'Cousin':'Extended';
+          const relationship=side ? up===0&&down===0?'Sibling':up===1&&down===0?'Aunt / uncle':up===1&&down===1?'Cousin':'Extended' : !down ? up===1?'Parent':up===2?'Grandparent':'Extended' : !up ? down===1?'Child':down===2?'Grandchild':'Extended' : up===1&&down===1?'Sibling':up===2&&down===1?'Aunt / uncle':up===2&&down===2?'Cousin':'Extended';
           if(!found.has(k))found.set(k,{id:next,relationship});queue.push({id:k,up,down,side});
         }
       }
       for(const child of this.entity('characters',id)?.c||[]) for(const parent of this.entity('characters',child)?.p||[]) if(key(parent)!==cacheKey && this.entity('characters',parent)) found.set(key(parent),{id:parent,relationship:'Spouse'});
-      const order=['Spouse','Grandparent','Parent','Sibling','Child','Aunt','Uncle','Cousin','Extended'];
+      const order=['Spouse','Grandparent','Parent','Sibling','Child','Grandchild','Aunt','Uncle','Cousin','Extended'];
       const result=[...found.values()].map(r=>{let relationship=r.relationship;if(relationship==='Aunt / uncle') relationship=this.entity('characters',r.id)?.gender==='female'?'Aunt':this.entity('characters',r.id)?.gender==='male'?'Uncle':'Extended';if(!order.includes(relationship))relationship='Extended';return {...r,relationship};}).sort((a,b)=>order.indexOf(a.relationship)-order.indexOf(b.relationship)||String(this.entity('characters',a.id)?.name||a.id).localeCompare(String(this.entity('characters',b.id)?.name||b.id)));
       this.familyCache.set(cacheKey,result);return result;
     }
@@ -507,25 +501,27 @@
         return { year, value: sum([...latest.values()]) };
       });
     }
-    period(ageIndex) {
-      const years = this.periodYears(ageIndex), allowed = new Set(years), out = { years, population: this.stats('world', '', 'population', years) };
+    period(ageIndex, selectedYears = this.periodYears(ageIndex), bounds = null) {
+      const years = selectedYears, allowed = new Set(years), out = { years, population: this.stats('world', '', 'population', years) };
       for (const type of ['kingdoms', 'villages']) {
-        const inPeriod = value => ageIndex === null ? value <= this.years.at(-1) : intervalStatus(this.ages[ageIndex],value) === 'active';
+        const inPeriod = value => bounds ? value >= bounds[0] && value <= bounds[1] : ageIndex === null ? value >= this.years[0] && value <= this.years.at(-1) : intervalStatus(this.ages[ageIndex],value) === 'active';
         out[`${type}_observed`] = this.catalog(type).filter(e => allowed.has(this.history(type,e.id)[0]?.year)).length;
         out[`${type}_ended`] = this.catalog(type).filter(e => { const b = boundary(e.end_year); return b && inPeriod(b.lo) && inPeriod(b.hi); }).length;
+      }
+      const endpoints = [years[0],years.at(-1)];
+      const count = (type,y) => {
+        if(y == null)return null;
+        if(type==='alliances') { const statuses=this.catalog(type).map(e=>intervalStatus(e,y));return statuses.some(s=>s==='uncertain'||s==='unknown')?null:statuses.filter(s=>s==='active').length; }
+        return this.records.get(y)?.raw[type]?.length ?? null;
+      };
+      out.changes = {};
+      for(const metric of ['population',...SPECIES,...TYPES]) {
+        const values=endpoints.map(y=>TYPES.includes(metric)?count(metric,y):this.snapshot('world','',y)?.[metric]);
+        out.changes[metric]=values.every(numeric)?values[1]-values[0]:null;
       }
       out.tracked_characters = years.some(y=>Array.isArray(this.records.get(y).raw.characters)) ? this.catalog('characters').filter(e=>this.history('characters',e.id).some(p=>allowed.has(p.year))).length : null;
       out.alliances_observed = this.catalog('alliances').filter(e => years.some(y => intervalStatus(e,y)==='active')).length;
       out.wars_observed = this.catalog('wars').filter(e => this.history('wars', e.id).some(p => allowed.has(p.year))).length;
-      let total = 0, count = 0;
-      for (const e of this.catalog('wars')) {
-        const h = this.history('wars', e.id);
-        for (let i = 1; i < h.length; i++) if (allowed.has(h[i - 1].year) && allowed.has(h[i].year)) {
-          const change = this.snapshot('wars', e.id, h[i].year).change_total_deaths;
-          if (numeric(change)) { total += change; count++; }
-        }
-      }
-      out.casualty_change = count ? total : null;
       return out;
     }
     milestones(type = null, id = null) {
@@ -545,7 +541,7 @@
           const target=field==='kingdom_id'?'kingdoms':'villages', value=field==='role' ? c.value || '—' : this.entity(target,c.value)?.name || '—';
           add(c.to, name+': '+(field==='role'?'observed as '+value:field==='kingdom_id'?'kingdom changed to '+value:'home village changed to '+value),t,e.id,c.from);
         }
-        if (t === 'villages') for (const c of this.ownership(e.id).changes) add(c.to, `${name}: recorded owner changed from ${this.entity('kingdoms', c.previous)?.name || c.previous || 'none'} to ${this.entity('kingdoms', c.owner)?.name || c.owner || 'none'}`, t, e.id, c.from);
+        if (t === 'villages') for (const c of this.ownership(e.id).changes) add(c.to, `${name}: ownership changed from ${this.entity('kingdoms', c.previous)?.name || c.previous || 'none'} to ${this.entity('kingdoms', c.owner)?.name || c.owner || 'none'}`, t, e.id, c.from);
         if (t === 'wars' || t === 'alliances') for (const m of e.kingdoms || []) for (const interval of m.involvement || []) {
           const start = boundary(interval.start_year), finish = boundary(interval.end_year), member = this.entity('kingdoms', m.kingdom_id)?.name || `#${m.kingdom_id}`;
           if (start) add(start.hi, `${name}: ${member} ${start.exact ? 'joined' : 'first observed participating'}${interval.side ? ` as ${interval.side === 'attacker' ? 'an attacker' : 'a defender'}` : ''}`, t, e.id);
@@ -554,7 +550,7 @@
       }
       if (type === 'kingdoms') {
         for (const village of this.catalog('villages')) for (const c of this.ownership(village.id).changes) {
-          if (key(c.previous) === key(id) || key(c.owner) === key(id)) add(c.to, `${village.name}: recorded ownership ${key(c.owner) === key(id) ? 'entered' : 'left'} this kingdom`, 'villages', village.id, c.from);
+          if (key(c.previous) === key(id) || key(c.owner) === key(id)) add(c.to, `${village.name}: ownership ${key(c.owner) === key(id) ? 'entered' : 'left'} this kingdom`, 'villages', village.id, c.from);
         }
         for (const relation of this.relations(id)) for (const i of relation.member.involvement) {
           const a = boundary(i.start_year), b = boundary(i.end_year);
