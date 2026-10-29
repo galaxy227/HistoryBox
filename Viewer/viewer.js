@@ -18,9 +18,17 @@
     'comparison-4': '#bac0c6',
     'comparison-5': '#626a75',
     'unknown-species': '#a6b5b8',
-    'attacker-data': "#e6e1d5",
-    'defender-data': "#967658",
+    'attacker-data': "#C09F6F",
+    'defender-data': "#674F42",
     // Site surfaces, typography, and controls.
+    // Map landforms and political boundaries.
+    'terrain-0': '#242c34',
+    'terrain-1': '#626158',
+    'terrain-2': '#858177',
+    'terrain-3': '#b6b2a7',
+    'map-boundary': '#ffffff',
+    'map-grid': '#14171b80',
+    'map-label': '#000000',
     'bg': '#101113',
     'panel': '#1b1e23',
     'panel2': '#252a31',
@@ -178,7 +186,9 @@
   let data = null, year = null, age = null, customWindow = false, windowStart = null, windowEnd = null, renderToken = 0;
   const requestedHash = location.hash;
   let displayedHash = location.hash;
+  let lastBrowserHash = "#/browser/kingdoms";
   const pageScroll = new Map();
+  const openTabs = new Map();
   history.scrollRestoration = 'manual';
   window.addEventListener('scroll', () => {
     if (data && !$('main').hidden && location.hash === displayedHash) {
@@ -251,7 +261,7 @@
   }));
   function saveView() {
     if (!data) return;
-    try { localStorage.setItem('historybox-view', JSON.stringify({ worldKey: JSON.stringify(data.world), year, age, customWindow, windowStart, windowEnd, hash: location.hash, preferences: [...preferences], pages: [...pages], browserStates: [...browserStates], tableStates: [...tableStates], legends: [...legendHidden].map(([k,v]) => [k,[...v]]), speed: $('speed').value, scroll: scrollY })); } catch {}
+    try { localStorage.setItem('historybox-view', JSON.stringify({ worldKey: JSON.stringify(data.world), year, age, customWindow, windowStart, windowEnd, hash: location.hash, lastBrowserHash, pageScroll:[...pageScroll], preferences: [...preferences], pages: [...pages], browserStates: [...browserStates], openTabs:[...openTabs], tableStates: [...tableStates], legends: [...legendHidden].map(([k,v]) => [k,[...v]]), speed: $('speed').value, scroll: scrollY })); } catch {}
   }
   function worldStore(value) {
     return new Promise((resolve, reject) => {
@@ -411,7 +421,7 @@
     const points = [['Peak',stats.peak],['Minimum',stats.minimum],['First available',stats.first],['Latest available',stats.last]];
     // Only bounded shares represent parts of a whole; other ratios stay in the ledger.
     if ((metric.endsWith('_share') || metric === 'army_ratio') && points.every(([,p]) => !p || (p.value >= 0 && p.value <= 1))) {
-      return `<div class="share-highlights" style="--series:${color}">${points.map(([title,p]) => `<figure${p ? ` data-tip="${esc(title + ': ' + format(p.value,metric))}"` : ''}><figcaption>${title}</figcaption>${p ? `<svg viewBox="0 0 120 120" role="img" aria-label="${esc(title + ': ' + format(p.value,metric))}"><circle class="share-track" cx="60" cy="60" r="46"/><circle class="share-value" cx="60" cy="60" r="46" pathLength="100" stroke-dasharray="${p.value*100} 100" transform="rotate(-90 60 60)"/><text x="60" y="65">${format(p.value,metric)}</text></svg><button data-event-year="${p.year}">Year ${p.year}</button>` : '<p>—</p>'}</figure>`).join('')}</div>`;
+      return `<div class="share-highlights" style="--series:${color}">${points.map(([title,p]) => `<figure${p ? ` data-tip-year="${p.year}" data-tip="${esc(title + ': ' + format(p.value,metric))}"` : ''}><figcaption>${title}</figcaption>${p ? `<svg viewBox="0 0 120 120" role="img" aria-label="${esc(title + ': ' + format(p.value,metric))}"><circle class="share-track" cx="60" cy="60" r="46"/><circle class="share-value" cx="60" cy="60" r="46" pathLength="100" stroke-dasharray="${p.value*100} 100" transform="rotate(-90 60 60)"/><text x="60" y="65">${format(p.value,metric)}</text></svg><button data-event-year="${p.year}">Year ${p.year}</button>` : '<p>—</p>'}</figure>`).join('')}</div>`;
     }
     return `<table class="highlight-ledger"><thead><tr><th class="year-column">Year</th><th>Record</th><th>${esc(label(metric))}</th></tr></thead><tbody>${points.map(([title,p]) => `<tr><td class="year-column">${p ? `<button data-event-year="${p.year}">${p.year}</button>` : '—'}</td><th scope="row">${title}</th><td><span data-number>${format(p?.value,metric)}</span>${staticBar(p?.value,stats.peak?.value)}</td></tr>`).join('')}</tbody></table>`;
   }
@@ -510,7 +520,7 @@
     const intervals = c.row.intervals.filter(i => i.observed ? selected >= i.start_year && selected <= i.end_year : ['active', 'uncertain'].includes(H.intervalStatus(i, selected)));
     clearTimeout(tooltipHideTimer);
     const tooltip = $('chart-tooltip');
-    tooltip.innerHTML = '<strong>' + esc(c.row.name) + ' · Year ' + selected + '</strong>' + (intervals.length ? intervals.map(i => '<div>' + esc(date(i.start_year)) + ' → ' + esc(date(i.end_year)) + (i.side ? ' · ' + esc(i.side) : '') + '</div>').join('') : '');
+    tooltip.innerHTML = '<strong>Year ' + selected + '</strong><div>' + esc(c.row.name) + '</div>' + (intervals.length ? intervals.map(i => '<div>' + esc(date(i.start_year)) + ' → ' + esc(date(i.end_year)) + (i.side ? ' · ' + esc(i.side) : '') + '</div>').join('') : '');
     if (track.dataset.track.endsWith(':space')) tooltip.innerHTML = '<strong>Year ' + selected + '</strong>';
     tooltip.hidden = false;
     positionTooltip(event);
@@ -577,20 +587,24 @@
 <button data-page="${id}" data-step="1"${page === maxPage ? ' disabled' : ''}>Next</button>
 </div>` : '<div class="pagination" aria-hidden="true"></div>'}`;
   }
-  function timeline(rows, id, { filter = true, sideColors = false } = {}) {
-    const query = pref(`${id}-search`, '').toLowerCase(), species = pref(`${id}-species`, '');
+  function overlapsWindow(interval,lo,hi) {
+    const a=H.boundary(interval.start_year),b=H.boundary(interval.end_year);
+    return a && (a.exact?a.lo<=hi:a.lo<hi) && (!b || (interval.observed?b.hi>=lo:b.hi>lo));
+  }
+  function timeline(rows, id) {
+    const species = pref(`${id}-species`, '');
     rows=rows.map(r=>({...r,species:r.species || (r.type ? data.entity(r.type,r.id)?.founding_species || data.entity(r.type,r.id)?.species : null)}));
     const [lo, hi] = id === 'ages' ? [data.years[0], data.years.at(-1)] : range(), pos = n => Math.max(0, Math.min(100, (n - lo) / Math.max(1, hi - lo) * 100));
-    const filtered = rows.filter(r => (!query || r.name.toLowerCase().includes(query)) && (!species || r.species === species)).sort((a, b) => compareValues(H.boundary(a.intervals[0]?.start_year)?.lo, H.boundary(b.intervals[0]?.start_year)?.lo));
-    const controls = `<div class="controls"><input type="search" aria-label="Search chronology" placeholder="Search…" data-pref="${id}-search" value="${esc(pref(`${id}-search`, ''))}">${rows.some(r=>r.species) ? selector(`${id}-species`, 'Species', ['', ...H.SPECIES], species, v => v ? label(v) : 'All species') : ''}</div>`;
+    const filtered = rows.filter(r => (id==='ages' || r.intervals.some(i=>overlapsWindow(i,lo,hi))) && (!species || r.species === species)).sort((a, b) => compareValues(H.boundary(a.intervals[0]?.start_year)?.lo, H.boundary(b.intervals[0]?.start_year)?.lo));
+    const controls = rows.some(r=>r.species) ? `<div class="controls">${selector(`${id}-species`, 'Species', ['', ...H.SPECIES], species, v => v ? label(v) : 'All species')}</div>` : '';
     const gaps = data.gaps.filter(([a, b]) => a < hi && b > lo).map(([a, b]) => `<span class="time-gap" style="left:${pos(a)}%;width:${pos(b) - pos(a)}%" aria-label="No observations between ${a} and ${b}"></span>`).join('');
     const content = filtered.map((r, index) => {
       const trackId = id + ":" + index;
       timelineViews.set(trackId, { row: r, lo, hi, years: (id === 'ages' ? data.years : scopeYears()).filter(y => y >= lo && y <= hi) });
       const bars = r.intervals.map(interval => {
         const a = H.boundary(interval.start_year), b = H.boundary(interval.end_year), end = b?.hi ?? hi;
-        if (!a || end < lo || a.lo > hi) return '';
-        const color = (sideColors && colors[interval.side]) || (r.type ? entityColor(r.type, r.id) : null) || palette[0];
+        if (!overlapsWindow(interval,lo,hi)) return '';
+        const color = (r.type ? entityColor(r.type, r.id) : null) || palette[0];
         const active = id === 'ages' ? year !== null && H.intervalStatus(interval, year) === 'active' : interval.observed ? year >= a.lo && year <= end : id.startsWith('life-') ? !!data.observed(r.type, r.id, year) : H.intervalStatus(interval, year) === 'active';
         const title = `${r.name}: ${date(interval.start_year)} → ${date(interval.end_year)}${interval.side ? ` · ${interval.side}` : ''}${interval.observed ? ' · observed ownership only' : ''}`;
         return `<span class="interval${active ? ' active' : ''}${interval.end_year === null ? ' open' : ''}" style="--series:${color};left:${Math.min(99.75,pos(a.hi))}%;width:${Math.max(.25, pos(b?.lo ?? hi) - pos(a.hi))}%" aria-label="${esc(title)}"></span>${[a, b].filter(v => v && !v.exact).map(v => `<span class="interval uncertain" style="--series:${color};left:${pos(v.lo)}%;width:${pos(v.hi) - pos(v.lo)}%" aria-label="${esc(title)} · uncertain boundary"></span>`).join('')}`;
@@ -674,7 +688,7 @@
       const stats = data.period(age,scopeYears(),range()), a = {start_year:range()[0],end_year:range()[1]};
       const periodCards = stats.changes;
       ageContent = section('Summary', `<div class="panel age-analysis">
-<h3 class="age-title">${customWindow ? 'Custom' : esc(ageName(age))} <span>· ${esc(date(a.start_year))} → ${esc(date(a.end_year))}</span></h3>${stats.years.length ? staticSummary(periodCards, [['Population change', ['population',...H.SPECIES]], ['Entity change', H.TYPES]], true) : '<p class="warning">No observations in this window.</p>'}
+<h3 class="age-title">${customWindow ? 'Custom' : esc(ageName(age))} <span>· ${esc(date(a.start_year))} → ${esc(date(a.end_year))}</span></h3>${stats.years.length ? staticSummary(periodCards, [['Population change', ['population',...H.SPECIES]]], true) + staticSummary(stats.recorded,[['Entities recorded',H.TYPES]]) + staticSummary(stats.ended,[['Entities ended',H.TYPES]]) : '<p class="warning">No observations in this window.</p>'}
 
 </div>`);
     }
@@ -687,7 +701,7 @@
 
 </div>
 
-</div>${year === null ? '<p class="warning">Selected age has no confident observations. Snapshot values are unavailable.</p>' : ''}${section('Snapshot', snapshotCards(snapshot, 'world', '', previous, previousYear))}${ageContent}${section('Statistics', `<div class="grid">${demographics('world', '', 'world-species')}${observations}</div>`)}${section('Chronology', `<div class="grid">${panel('Ages',timeline(data.ages.map((a,i)=>({name:ageName(i),intervals:[a],id:i})), 'ages'))}${['kingdoms','villages','wars','alliances'].map(t => panel(typeLabel(t),timeline(data.catalog(t).map(e=>({name:e.name || `#${e.id}`,id:e.id,type:t,species:e.founding_species||e.species,intervals:[e]})),`life-${t}`,{filter:t==='kingdoms'||t==='villages'}))).join('')}</div>`)}${section('Rankings', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t=>{const choices=standardMetrics(t),metric=choices.includes(pref(`ranking-${t}`,choices[0]))?pref(`ranking-${t}`,choices[0]):choices[0];return panel(typeLabel(t),`<p class="ranking-year">Year ${year ?? '—'}</p>${rankings(t,metric)}`,selector(`ranking-${t}`,'Measure',choices,metric));}).join('')}</div>`)}${section('Historical milestones', `<div class="panel">${events()}</div>`)}`;
+</div>${year === null ? '<p class="warning">Selected age has no confident observations. Snapshot values are unavailable.</p>' : ''}${section('Snapshot', snapshotCards(snapshot, 'world', '', previous, previousYear))}${ageContent}${section('Statistics', `<div class="grid">${demographics('world', '', 'world-species')}${observations}</div>`)}${section('Chronology', `<div class="grid">${panel('Ages',timeline(data.ages.map((a,i)=>({name:ageName(i),intervals:[a],id:i})), 'ages'))}${['kingdoms','villages','wars','alliances'].map(t => panel(typeLabel(t),timeline(data.catalog(t).map(e=>({name:e.name || `#${e.id}`,id:e.id,type:t,species:e.founding_species||e.species,intervals:[e]})),`life-${t}`))).join('')}</div>`)}${section('Rankings', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t=>{const choices=standardMetrics(t),metric=choices.includes(pref(`ranking-${t}`,choices[0]))?pref(`ranking-${t}`,choices[0]):choices[0];return panel(typeLabel(t),`<p class="ranking-year">Year ${year ?? '—'}</p>${rankings(t,metric)}`,selector(`ranking-${t}`,'Measure',choices,metric));}).join('')}</div>`)}${section('Historical milestones', `<div class="panel">${events()}</div>`)}`;
   }
   const populationMetrics = ['population',...H.SPECIES];
   const commonMetrics = [...populationMetrics, 'army', 'territory', 'houses', 'food', 'coins', 'population_share', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'houses_per_resident'];
@@ -739,16 +753,16 @@
       const rows = data.catalog('villages').flatMap(v => { const runs = data.ownership(v.id).runs.filter(r => String(r.owner) === String(id)); return runs.length ? [{ name: v.name, id: v.id, type: 'villages', species: v.founding_species, intervals: runs }] : []; });
       ownership = panel('Villages',timeline(rows, 'owned-villages'));
     }
-    const relationshipPanel = (title, rows, records, chartId) => panel(title,timeline(rows,chartId,{sideColors:type==='wars'}));
+    const relationshipPanel = (title, rows, records, chartId) => panel(title,timeline(rows,chartId));
     const relations = type === 'kingdoms'
       ? ['wars','alliances'].map(t => relationshipPanel(typeLabel(t), intervals.filter(r => r.type === t), relationshipRecords.filter(r => r.type === t), 'involvement-' + t)).join('')
       : intervals.length ? relationshipPanel('Kingdoms', intervals, relationshipRecords, 'involvement') : '';
     const highlightMetric = metrics.includes(pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population')) ? pref(`entity-highlight-${type}`,type === 'characters' ? 'level' : 'population') : metrics[0], stats = data.stats(type, id, highlightMetric);
-    const historical = `<div class="panel"><div class="controls">${selector(`entity-highlight-${type}`, 'Measure', metrics, highlightMetric)}</div>${lifetimeHighlights(stats, highlightMetric, metricColor(highlightMetric))}${type === 'alliances' ? staticSummary(summary, [['Membership', ['historical_members','peak_members']], ['Participation', ['intervals','rejoining','participation_changes']]]) : ''}</div>`;
+    const historical = `<div class="panel"><div class="controls">${selector(`entity-highlight-${type}`, 'Measure', metrics, highlightMetric)}</div>${lifetimeHighlights(stats, highlightMetric, metricColor(highlightMetric))}</div>`;
     const chartId = `entity-${type}`, observationOptions = observationMetrics(type), historicalMetric = observationOptions.includes(pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army')) ? pref(`${chartId}-metric`,type === 'characters' ? 'level' : 'army') : observationOptions[0];
-    const observationSeries = [{name:type === 'wars' ? 'Total' : entity.name,type,id,color:type==='wars' && historicalMetric.startsWith('attacker')?colors.attacker:type==='wars' && historicalMetric.startsWith('defender')?colors.defender:THEME['global-data'],points:data.series(type,id,historicalMetric)}];
+    const observationSeries = [{name:type === 'wars' ? 'Total' : entity.name,type,id,color:type==='wars' && historicalMetric.startsWith('attacker')?colors.attacker:type==='wars' && historicalMetric.startsWith('defender')?colors.defender:entityColor(type,id),points:data.series(type,id,historicalMetric)}];
     if(type === 'wars' && (!warMetrics.includes(historicalMetric) || historicalMetric==='total_deaths')) for(const side of ['attacker','defender']) observationSeries.push({name:typeLabel(side+'s'),color:colors[side],points:historicalMetric==='total_deaths'?data.series(type,id,side+'_deaths'):data.warSideSeries(id,side,historicalMetric)});
-    observationSeries.push({name:`Global ${singular(type)} average`,color:THEME['comparison-secondary'],points:data.averageSeries(type,historicalMetric)});
+    observationSeries.push({name:`Global ${singular(type)} average`,color:THEME['global-data'],points:data.averageSeries(type,historicalMetric)});
     const baseCharts = panel('Historical observations',chart(observationSeries,historicalMetric,{id:'entity-observations-'+type}),selector(`${chartId}-metric`,'Measure',observationOptions,historicalMetric));
     const secondary = type === 'characters' ? '' : demographics(type,id,`entity-${type}-species`);
     const characterSections = type === 'characters' ? characterHistory(id) : {chronology:'',family:''};
@@ -782,7 +796,13 @@
 </div>` : ''}</dl><div class="controls"><button data-entity-window="${esc(id)}" data-entity-type="${type}">View duration</button>${durationWindow ? `<span class="muted">${durationWindow.join(' → ')}</span>` : ''}</div><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
 </div>
 
-</div>${snapshot?.complete === false ? '<p class="warning">Some relationships could not be confirmed. See Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
+</div>${snapshot?.complete === false ? '<p class="warning">Some relationships could not be confirmed. See Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear) + (type === 'wars' ? warParticipants(id) : ''))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
+  }
+  function warParticipants(id) {
+    const members=data.memberships('wars',id,year).filter(m=>m.status==='active');
+    const sides=['attacker','defender'].map(side=>members.filter(m=>m.side===side));
+    const rows=Array.from({length:Math.max(1,...sides.map(s=>s.length))},(_,i)=>'<tr>'+sides.map(side=>'<td>'+(side[i]?link('kingdoms',side[i].id):'—')+'</td>').join('')+'</tr>').join('');
+    return panel('Participants','<div class="table-wrap war-participants"><table><thead><tr><th>Attackers</th><th>Defenders</th></tr></thead><tbody>'+rows+'</tbody></table></div>');
   }
   function snapshotAssociations(type,id,snapshot) {
     if(type==='villages') {
@@ -795,7 +815,7 @@
   function observationTimeline(type,id,field,target,title) {
     const runs=data.observationRuns(type,id,field).runs,rows=new Map();
     for(const r of runs) {const k=String(r.value);if(!rows.has(k)) rows.set(k,{name:r.value==null?'—':target?data.entity(target,r.value)?.name||'#'+r.value:label(r.value),type:target,id:r.value,intervals:[]});rows.get(k).intervals.push(r);}
-    return panel(title,timeline([...rows.values()],type+'-'+id+'-'+field,{filter:false}));
+    return panel(title,timeline([...rows.values()],type+'-'+id+'-'+field));
   }
   function characterHistory(id) {
     const relatives=data.family(id), ids=new Set([String(id),...relatives.map(r=>String(r.id))]);
@@ -807,7 +827,7 @@
       roles.get(k).intervals.push(run);
     }
     const choices=standardMetrics('characters'), metric=choices.includes(pref('family-ranking','level'))?pref('family-ranking','level'):'level';
-    return {chronology:panel('Roles',timeline([...roles.values()],'character-roles-'+id,{filter:false}))+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdoms')+observationTimeline('characters',id,'village_id','villages','Villages'),family:section('Family','<div class="grid">'+panel('Relatives',relatives.length?family:'<p class="empty">—</p>')+panel('Rankings','<p class="ranking-year">Year '+(year ?? '—')+'</p>'+rankings('characters',metric,ids),selector('family-ranking','Measure',choices,metric))+'</div>')};
+    return {chronology:panel('Roles',timeline([...roles.values()],'character-roles-'+id))+observationTimeline('characters',id,'kingdom_id','kingdoms','Kingdoms')+observationTimeline('characters',id,'village_id','villages','Villages'),family:section('Family','<div class="grid">'+panel('Relatives',relatives.length?family:'<p class="empty">—</p>')+panel('Rankings','<p class="ranking-year">Year '+(year ?? '—')+'</p>'+rankings('characters',metric,ids),selector('family-ranking','Measure',choices,metric))+'</div>')};
   }
   function leadershipHistory(type,id) {
     const role=type==='kingdoms'?'king':'leader',field=type==='kingdoms'?'kingdom_id':'village_id',rows=[];
@@ -822,6 +842,33 @@
       content=panel('Capitals',timeline([...rows.values()],'capitals-'+id))+content;
     }return content;
   }
+  function tabsFor(type) {
+    let tabs=openTabs.get(type);
+    if(!Array.isArray(tabs))tabs=[];
+    const seen=new Set(); tabs=tabs.filter(t=>t && data.entity(type,t.id) && !seen.has(String(t.id)) && seen.add(String(t.id))).slice(0,5);
+    let locks=0;tabs.forEach((t,i)=>{t.order=Number.isFinite(t.order)?t.order:i;t.locked=!!t.locked && ++locks<=4;});
+    tabs.sort((a,b)=>Number(b.locked)-Number(a.locked)||a.order-b.order);openTabs.set(type,tabs);return tabs;
+  }
+  function rememberTab(type,id) {
+    const tabs=tabsFor(type);if(tabs.some(t=>String(t.id)===String(id)))return;
+    const order=Math.max(-1,...tabs.map(t=>t.order))+1;
+    if(tabs.length===5){const oldest=tabs.filter(t=>!t.locked).sort((a,b)=>a.order-b.order)[0];tabs.splice(tabs.indexOf(oldest),1);}
+    tabs.push({id,locked:false,order});
+  }
+  function renderTabs(type,selected) {
+    const tabs=tabsFor(type);if(!tabs.length)return '';
+    return '<div class="record-tabs" aria-label="Open '+singular(type)+' records">'+tabs.map((t,i)=>{
+      const lock=t.locked || (i<4 && tabs.filter(t=>t.locked).length<4);
+      return '<div class="record-tab'+(String(t.id)===String(selected)?' selected':'')+'" style="--series:'+entityColor(type,t.id)+'">'+(lock?'<button class="tab-lock'+(t.locked?' locked':'')+'" data-tab-lock="'+esc(t.id)+'" data-tab-type="'+type+'" aria-label="'+(t.locked?'Unlock':'Lock')+' '+esc(data.entity(type,t.id).name)+'"><svg viewBox="0 0 24 28" aria-hidden="true">'+(t.locked?'<path class="lock-solid" fill-rule="evenodd" d="M6 11V8a6 6 0 0112 0v3h2v14H4V11zm3 0h6V8a3 3 0 00-6 0z"/>':'<rect x="4" y="15" width="16" height="10" rx="1"/><path d="M7 15V7a5 5 0 0110 0v2"/>')+'</svg></button>':'')+'<a href="#/'+singular(type)+'/'+encodeURIComponent(t.id)+'"'+(String(t.id)===String(selected)?' aria-current="page"':'')+'>'+esc(data.entity(type,t.id).name)+'</a><button class="tab-close" data-tab-close="'+esc(t.id)+'" data-tab-type="'+type+'" aria-label="Close '+esc(data.entity(type,t.id).name)+'">×</button></div>';
+    }).join('')+'</div>';
+  }
+  $('entity-manager').addEventListener('click',e=>{
+    const button=e.target.closest('[data-tab-close],[data-tab-lock]');if(!button)return;e.preventDefault();
+    const type=button.dataset.tabType,tabs=tabsFor(type),id=button.dataset.tabClose ?? button.dataset.tabLock,index=tabs.findIndex(t=>String(t.id)===id);if(index<0)return;
+    if(button.dataset.tabClose!==undefined){tabs.splice(index,1);const r=route();if(!tabs.length || (r.name===singular(type)&&String(r.id)===id)){location.hash=tabs.length?'#/'+singular(type)+'/'+encodeURIComponent(tabs[Math.min(index,tabs.length-1)].id):'#/browser/'+type;}}
+    else {const t=tabs[index];if(t.locked || (index<4 && tabs.filter(t=>t.locked).length<4))t.locked=!t.locked;}
+    render(false,false);
+  });
   function entityTabs(type) {
     return '<nav class="entity-tabs" aria-label="Entity types">' + H.TYPES.map(t => '<a href="#/browser/' + t + '"' + (t === type ? ' aria-current="page"' : '') + '>' + entityIcon(t) + typeLabel(t) + '</a>').join('') + '</nav>';
   }
@@ -890,6 +937,189 @@
     const compare = s.selected.length ? `<div class="controls">${bindSelect('compareMetric', 'Compare measure', metricsFor(type), s.compareMetric)}${globalPoints ? `<label><input type="checkbox" data-global="${type}"${s.showGlobal ? ' checked' : ''}>Global</label>` : ''}</div>${chart(comparisonSeries, s.compareMetric, {legendControls:false, solid:true, id:'comparison'})}<div class="table-wrap"><table class="comparison-table"><thead><tr>${comparisonHeading('name','Entity')}${comparisonHeading('value',label(s.compareMetric))}</tr></thead><tbody>${comparisonRows.map(r=>`<tr><td>${r.id == null ? 'Global' : link(type,r.id)}</td><td>${format(r.value,s.compareMetric)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Select entities to compare.</p>';
     return '<div class="page-head"><div><p class="eyebrow">Entity browser</p><h1>' + typeLabel(type) + '</h1></div></div>' + '<section class="panel">' + controls + '<div class="catalog-count">' + rows.length + ' ' + type + ' · ' + (s.mode === 'history' ? 'All history' : 'Selected year') + '</div>' + table(type, rows, available.filter(c => s.columns[s.mode].includes(c)), 'browser-' + type + '-' + s.mode, { selectable: true, selected: s.selected }) + '</section>' + section('Compare', '<div class="panel">' + compare + '</div>');
   }
+  // Map coordinates are bottom-left zone IDs; camera coordinates use screen rows.
+  let mapCamera=null,mapLayer='kingdoms',mapSelection=null,mapFrame=null,mapNames=true,mapSettings=false;
+  const mapPointers=new Map();let mapGesture=null;
+  const terrainNames=['Water','Plain','Hill','Mountain'];
+  function mapLegend() {
+    return (mapLayer!=='terrain'?'<div>'+H.SPECIES.map(s=>'<span><i style="background:var(--'+s+')"></i>'+label(s)+'</span>').join('')+'</div>':'')+'<div>'+terrainNames.map((n,i)=>'<span><i style="background:var(--terrain-'+i+')"></i>'+n+'</span>').join('')+'</div>';
+  }
+  function mapPage() {
+    return '<section class="map-page"><div class="map-toolbar"><h1>Map</h1><label>View<select id="map-layer">'+['terrain','kingdoms','villages'].map(v=>'<option value="'+v+'"'+(v===mapLayer?' selected':'')+'>'+typeLabel(v)+'</option>').join('')+'</select></label><button data-map-settings aria-label="Map settings" aria-controls="map-settings" aria-expanded="'+mapSettings+'"><svg viewBox="0 0 20 14" aria-hidden="true"><path d="M2 2 L10 11 L18 2"/></svg></button></div><div class="map-stage"><canvas id="world-map" tabindex="0" aria-label="World map. Drag to pan, scroll or pinch to zoom. Click territory to inspect its village and kingdom."></canvas><div id="map-settings" class="map-settings"'+(mapSettings?'':' hidden')+'><label id="map-names-control"'+(mapLayer==='terrain'?' hidden':'')+'>Names<input id="map-names" type="checkbox"'+(mapNames?' checked':'')+'></label></div><div class="map-zoom"><button data-map-zoom="0.6666667" aria-label="Zoom out">−</button><button data-map-zoom="1.5" aria-label="Zoom in">+</button></div><div id="map-selection" class="map-selection" hidden></div><p id="map-empty" hidden>No observation for this year</p><div class="map-legend">'+mapLegend()+'</div></div></section>';
+  }
+  function mapZoomBounds(width,base) {
+    const min=width/(1.5*data.mapWidth)/base;
+    return [min,Math.max(min,width/8/base)];
+  }
+  function mapTransform() {
+    const c=$('world-map');if(!c)return null;
+    const box=c.getBoundingClientRect(),base=Math.min(box.width/data.mapWidth,box.height/data.mapHeight)*.94;
+    if(!mapCamera)mapCamera={x:data.mapWidth/2,y:data.mapHeight/2,zoom:1};
+    const [minZoom,maxZoom]=mapZoomBounds(box.width,base);
+    mapCamera.zoom=Math.max(minZoom,Math.min(maxZoom,mapCamera.zoom));
+    const scale=base*mapCamera.zoom;
+    const clamp=(v,size,viewport)=>size*scale<=viewport?size/2:Math.max(viewport/(2*scale),Math.min(size-viewport/(2*scale),v));
+    mapCamera.x=clamp(mapCamera.x,data.mapWidth,box.width);mapCamera.y=clamp(mapCamera.y,data.mapHeight,box.height);
+    return {box,base,scale,x:box.width/2-mapCamera.x*scale,y:box.height/2-mapCamera.y*scale};
+  }
+  function mapZone(event) {
+    const t=mapTransform();if(!t)return null;
+    const x=Math.floor((event.clientX-t.box.left-t.x)/t.scale),row=Math.floor((event.clientY-t.box.top-t.y)/t.scale);
+    return x>=0&&row>=0&&x<data.mapWidth&&row<data.mapHeight?(data.mapHeight-1-row)*data.mapWidth+x:null;
+  }
+  function mapObservation() {
+    if(mapFrame?.data===data && mapFrame.year===year)return mapFrame;
+    const record=data.records.get(year),owners=new Map();
+    for(const v of record?.raw.villages || [])for(const z of v.territory)if(z>=0)owners.set(z,v);
+    return mapFrame={data,year,record,owners,terrain:data.terrainAt(year),labels:new Map()};
+  }
+  function mapDetails(zone) {
+    const frame=mapObservation();if(zone==null||!frame.record)return null;
+    const village=frame.owners.get(zone);
+    return {village,kingdom:village?.kingdom_id,terrain:frame.terrain[zone]};
+  }
+  function mapTip(event) {
+    const info=mapDetails(mapZone(event));if(!info){$('chart-tooltip').hidden=true;return;}
+    const name=mapLayer==='villages'?data.entity('villages',info.village?.id)?.name:mapLayer==='kingdoms'?data.entity('kingdoms',info.kingdom)?.name:null;
+    simpleTooltip(event,'Year '+year+'\n'+(name || terrainNames[info.terrain]));
+  }
+  function updateMapSelection() {
+    const panel=$('map-selection');if(!panel)return;
+    const info=mapDetails(mapSelection);panel.hidden=!info;
+    if(!info)return;
+    panel.innerHTML='<button class="map-dismiss" data-map-dismiss aria-label="Close map selection">×</button><div class="map-selection-content"><strong>'+terrainNames[info.terrain]+'</strong>'+(info.village?'<div>'+link('villages',info.village.id)+'</div>'+(info.kingdom!=null?'<div>'+link('kingdoms',info.kingdom)+'</div>':''):'')+'</div>';
+  }
+  // Geometry and fitted glyphs use zone coordinates, independent of zoom. Each
+  // connected component has its own centroid so islands never receive ocean labels.
+  function mapLabelAreas(frame,ownerKey) {
+    if(frame.labels.has(mapLayer))return frame.labels.get(mapLayer);
+    const unseen=new Set(frame.owners.keys()),areas=[];
+    while(unseen.size){
+      const first=unseen.values().next().value,key=ownerKey(first),zones=[],queue=[first];unseen.delete(first);
+      for(let n=0;n<queue.length;n++){const z=queue[n],x=z%data.mapWidth;zones.push(z);for(const next of [x>0?z-1:-1,x<data.mapWidth-1?z+1:-1,z-data.mapWidth,z+data.mapWidth])if(unseen.has(next)&&ownerKey(next)===key){unseen.delete(next);queue.push(next);}}
+      const points=zones.map(z=>({x:z%data.mapWidth+.5,y:data.mapHeight-.5-Math.floor(z/data.mapWidth)}));
+      const cx=points.reduce((n,p)=>n+p.x,0)/points.length,cy=points.reduce((n,p)=>n+p.y,0)/points.length;
+      const columns=new Map();for(const p of points){const x=Math.floor(p.x);if(!columns.has(x))columns.set(x,[]);columns.get(x).push(p.y);}
+      for(const ys of columns.values())ys.sort((a,b)=>a-b);
+      const candidates=[{x:cx,y:cy},...points.sort((a,b)=>(a.x-cx)**2+(a.y-cy)**2-(b.x-cx)**2-(b.y-cy)**2).slice(0,128)];
+      const v=frame.owners.get(first),type=mapLayer==='kingdoms'&&v.kingdom_id!=null?'kingdoms':'villages',id=type==='kingdoms'?v.kingdom_id:v.id;
+      areas.push({zones:new Set(zones),columns,candidates,name:(data.entity(type,id)?.name || '').toLocaleUpperCase(),layout:undefined});
+    }
+    frame.labels.set(mapLayer,areas);return areas;
+  }
+  function fitMapLabel(ctx,area) {
+    const inside=(x,y)=>x>=0&&x<data.mapWidth&&y>=0&&y<data.mapHeight&&area.zones.has((data.mapHeight-1-Math.floor(y))*data.mapWidth+Math.floor(x));
+    const columns=[...area.columns.keys()],lo=Math.min(...columns)+.5,hi=Math.max(...columns)+.5;
+    // Follow the center of the nearest continuous vertical strip. On a square
+    // these centers are level; a U's outer strips rise relative to its bottom.
+    const stripCenter=(x,y)=>{
+      const ys=area.columns.get(Math.floor(x));if(!ys)return y;
+      let best=y,distance=Infinity,start=0;
+      for(let i=1;i<=ys.length;i++)if(i===ys.length||ys[i]-ys[i-1]>1){const mid=(ys[start]+ys[i-1])/2,d=Math.abs(mid-y);if(d<distance){best=mid;distance=d;}start=i;}
+      return best;
+    };
+    const chars=Array.from(area.name);ctx.font='bold 100px "Trebuchet MS", sans-serif';
+    const units=chars.map(c=>ctx.measureText(c).width/100);
+    const initial=Math.min(2.2,Math.max(.3,Math.sqrt(area.zones.size)*.22));
+    for(let size=initial;size>=.12;size*=.88){
+      const widths=units.map(w=>w*size),total=widths.reduce((a,b)=>a+b,0);
+      for(const center of area.candidates){
+        if(!inside(center.x,center.y))continue;
+        const span=Math.max(1,(hi-lo)/2),middle=stripCenter(center.x,center.y),left=stripCenter(Math.max(lo,center.x-span),center.y),right=stripCenter(Math.min(hi,center.x+span),center.y);
+        const slope=Math.max(-.7,Math.min(.7,(right-left)/(2*span)));
+        const curve=Math.max(-.7/span,Math.min(.7/span,(left+right-2*middle)/(2*span*span)));
+        let offset=-total/2;const letters=[];
+        for(let i=0;i<chars.length;i++){
+          const dx=offset+widths[i]/2,angle=Math.max(-Math.PI/4,Math.min(Math.PI/4,Math.atan(slope+2*curve*dx)));
+          letters.push({char:chars[i],x:center.x+dx,y:center.y+slope*dx+curve*dx*dx,angle,width:widths[i]});offset+=widths[i];
+        }
+        // Sample whole rotated bounding boxes, not only corners: holes and
+        // concave coastlines must not cut through the middle of a letter.
+        const fits=letters.every(g=>{
+          const halfW=g.width/2+size*.06,halfH=size*.58,stepsX=Math.max(2,Math.ceil(halfW*2/.15)),stepsY=Math.max(2,Math.ceil(halfH*2/.15));
+          for(let ix=0;ix<=stepsX;ix++)for(let iy=0;iy<=stepsY;iy++){
+            const dx=-halfW+2*halfW*ix/stepsX,dy=-halfH+2*halfH*iy/stepsY;
+            if(!inside(g.x+dx*Math.cos(g.angle)-dy*Math.sin(g.angle),g.y+dx*Math.sin(g.angle)+dy*Math.cos(g.angle)))return false;
+          }return true;
+        });
+        if(fits)return {size,letters};
+      }
+    }
+    return null;
+  }
+  function drawMapNames(ctx,t,frame,ownerKey) {
+    for(const area of mapLabelAreas(frame,ownerKey)) {
+      if(!area.name)continue;
+      if(area.layout===undefined)area.layout=fitMapLabel(ctx,area);
+      const layout=area.layout;if(!layout||layout.size*t.scale<7)continue;
+      ctx.save();ctx.beginPath();for(const z of area.zones)ctx.rect(t.x+(z%data.mapWidth)*t.scale,t.y+(data.mapHeight-1-Math.floor(z/data.mapWidth))*t.scale,t.scale,t.scale);ctx.clip();
+      ctx.fillStyle=THEME['map-label'];ctx.globalAlpha=.78;ctx.font='bold '+layout.size*t.scale+'px "Trebuchet MS", sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      for(const g of layout.letters){ctx.save();ctx.translate(t.x+g.x*t.scale,t.y+g.y*t.scale);ctx.rotate(g.angle);ctx.fillText(g.char,0,0);ctx.restore();}ctx.restore();
+    }
+  }
+  function drawMap() {
+    const c=$('world-map');if(!c||$('main').hidden)return;
+    const main=$('main'),bottom=$('timeline-shell').getBoundingClientRect().top;
+    main.style.height=Math.max(100,bottom-main.getBoundingClientRect().top-8)+'px';
+    const t=mapTransform(),dpr=Math.min(devicePixelRatio||1,2),w=Math.round(t.box.width*dpr),h=Math.round(t.box.height*dpr);
+    if(c.width!==w)c.width=w;if(c.height!==h)c.height=h;
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,t.box.width,t.box.height);
+    const frame=mapObservation(),{terrain,owners,record}=frame;$('map-empty').hidden=!!terrain;
+    if(!terrain){updateMapSelection();return;}
+    const x0=Math.max(0,Math.floor(-t.x/t.scale)),x1=Math.min(data.mapWidth,Math.ceil((t.box.width-t.x)/t.scale));
+    const r0=Math.max(0,Math.floor(-t.y/t.scale)),r1=Math.min(data.mapHeight,Math.ceil((t.box.height-t.y)/t.scale));
+    const ownerKey=z=>{const v=owners.get(z);return v?(mapLayer==='kingdoms'&&v.kingdom_id!=null?'k'+v.kingdom_id:'v'+v.id):null;};
+    for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++) {
+      const z=(data.mapHeight-1-row)*data.mapWidth+x,px=t.x+x*t.scale,py=t.y+row*t.scale,v=owners.get(z);
+      ctx.fillStyle=THEME['terrain-'+terrain[z]];ctx.fillRect(px,py,t.scale+.3,t.scale+.3);
+      if(v&&mapLayer!=='terrain'){ctx.globalAlpha=.65;ctx.fillStyle=entityColor(mapLayer==='kingdoms'&&v.kingdom_id!=null?'kingdoms':'villages',mapLayer==='kingdoms'&&v.kingdom_id!=null?v.kingdom_id:v.id);ctx.fillRect(px,py,t.scale+.3,t.scale+.3);ctx.globalAlpha=1;}
+    }
+    // Suppress subpixel grids when fitted very far out; never draw dense moire.
+    if(t.scale>=5){ctx.strokeStyle=THEME['map-grid'];ctx.lineWidth=1.25;ctx.beginPath();for(let x=x0;x<=x1;x++){ctx.moveTo(t.x+x*t.scale,t.y+r0*t.scale);ctx.lineTo(t.x+x*t.scale,t.y+r1*t.scale);}for(let row=r0;row<=r1;row++){ctx.moveTo(t.x+x0*t.scale,t.y+row*t.scale);ctx.lineTo(t.x+x1*t.scale,t.y+row*t.scale);}ctx.stroke();}
+    if(mapLayer!=='terrain') {
+      ctx.strokeStyle=THEME['map-boundary'];ctx.lineWidth=2.25;ctx.beginPath();
+      for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++){const z=(data.mapHeight-1-row)*data.mapWidth+x,px=t.x+x*t.scale,py=t.y+row*t.scale;if(!owners.has(z))continue;
+        if(x===0||ownerKey(z-1)!==ownerKey(z)){ctx.moveTo(px,py);ctx.lineTo(px,py+t.scale);}
+        if(x===data.mapWidth-1||ownerKey(z+1)!==ownerKey(z)){ctx.moveTo(px+t.scale,py);ctx.lineTo(px+t.scale,py+t.scale);}
+        if(row===0||ownerKey(z+data.mapWidth)!==ownerKey(z)){ctx.moveTo(px,py);ctx.lineTo(px+t.scale,py);}
+        if(row===data.mapHeight-1||ownerKey(z-data.mapWidth)!==ownerKey(z)){ctx.moveTo(px,py+t.scale);ctx.lineTo(px+t.scale,py+t.scale);}
+      }ctx.stroke();
+      for(const v of record.raw.villages)if(v.territory[0]>=0){const z=v.territory[0],px=t.x+(z%data.mapWidth+.5)*t.scale,py=t.y+(data.mapHeight-1-Math.floor(z/data.mapWidth)+.5)*t.scale,r=t.scale*.4;ctx.fillStyle=entityColor('villages',v.id);ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=Math.min(4,t.scale*.2);ctx.beginPath();ctx.moveTo(px,py-r);ctx.lineTo(px+r,py+r);ctx.lineTo(px-r,py+r);ctx.closePath();ctx.fill();ctx.stroke();}
+      if(mapNames)drawMapNames(ctx,t,frame,ownerKey);
+    }
+    if(mapSelection!=null){ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=2.5;ctx.strokeRect(t.x+(mapSelection%data.mapWidth)*t.scale,t.y+(data.mapHeight-1-Math.floor(mapSelection/data.mapWidth))*t.scale,t.scale,t.scale);}
+    updateMapSelection();
+  }
+  function zoomMap(factor,event) {
+    const t=mapTransform();if(!t)return;
+    const x=event?event.clientX-t.box.left:t.box.width/2,y=event?event.clientY-t.box.top:t.box.height/2;
+    const gx=(x-t.x)/t.scale,gy=(y-t.y)/t.scale,oldZoom=mapCamera.zoom;
+    const [minZoom,maxZoom]=mapZoomBounds(t.box.width,t.base);
+    mapCamera.zoom=Math.max(minZoom,Math.min(maxZoom,mapCamera.zoom*factor));
+    const scale=t.scale*mapCamera.zoom/oldZoom;
+    mapCamera.x=gx-(x-t.box.width/2)/scale;mapCamera.y=gy-(y-t.box.height/2)/scale;drawMap();
+  }
+  $('main').addEventListener('wheel',e=>{if(e.target.id==='world-map'){e.preventDefault();zoomMap(Math.exp(-e.deltaY*.002),e);}},{passive:false});
+  $('main').addEventListener('pointerdown',e=>{if(e.target.id!=='world-map')return;e.preventDefault();e.target.setPointerCapture(e.pointerId);mapPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});mapGesture={x:e.clientX,y:e.clientY,moved:false};});
+  $('main').addEventListener('pointermove',e=>{
+    if(e.target.id!=='world-map')return;
+    if(mapPointers.has(e.pointerId)){
+      const old=mapPointers.get(e.pointerId),others=[...mapPointers].filter(([id])=>id!==e.pointerId);mapPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(others.length){const q=others[0][1],before=Math.hypot(old.x-q.x,old.y-q.y),after=Math.hypot(e.clientX-q.x,e.clientY-q.y);if(before)zoomMap(after/before,{clientX:(e.clientX+q.x)/2,clientY:(e.clientY+q.y)/2});}
+      else{const t=mapTransform();mapCamera.x-=(e.clientX-old.x)/t.scale;mapCamera.y-=(e.clientY-old.y)/t.scale;drawMap();}
+      if(Math.hypot(e.clientX-mapGesture.x,e.clientY-mapGesture.y)>3||others.length)mapGesture.moved=true;
+      $('chart-tooltip').hidden=true;return;
+    }
+    mapTip(e);
+  });
+  function endMapGesture(e){if(!mapPointers.has(e.pointerId))return;mapPointers.delete(e.pointerId);if(!mapGesture?.moved&&e.type!=='pointercancel'){mapSelection=mapZone(e);drawMap();}if(!mapPointers.size)mapGesture=null;}
+  $('main').addEventListener('pointerup',endMapGesture);$('main').addEventListener('pointercancel',endMapGesture);
+  $('main').addEventListener('click',e=>{const b=e.target.closest('[data-map-zoom],[data-map-settings],[data-map-dismiss]');if(!b)return;if(b.hasAttribute('data-map-settings')){mapSettings=!mapSettings;$('map-settings').hidden=!mapSettings;b.setAttribute('aria-expanded',String(mapSettings));}else if(b.hasAttribute('data-map-dismiss'))mapSelection=null;else zoomMap(Number(b.dataset.mapZoom));drawMap();});
+  $('main').addEventListener('change',e=>{if(e.target.id==='map-layer'){mapLayer=e.target.value;$('map-names-control').hidden=mapLayer==='terrain';document.querySelector('.map-legend').innerHTML=mapLegend();drawMap();refreshHover();}else if(e.target.id==='map-names'){mapNames=e.target.checked;drawMap();}});
+  $('main').addEventListener('keydown',e=>{if(e.target.id==='world-map'&&['+','=','-','Home'].includes(e.key)){e.preventDefault();if(e.key==='Home'){mapCamera=null;drawMap();}else zoomMap(e.key==='-'?1/1.5:1.5);}});
+  new ResizeObserver(()=>{if($('world-map'))requestAnimationFrame(drawMap);}).observe($('main'));
+  window.addEventListener('resize',()=>requestAnimationFrame(drawMap));
+
   function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
     let id; try { id = decodeURIComponent(parts[1] || ''); } catch { id = ''; }
@@ -916,7 +1146,7 @@
   let pointer = null, tooltipHideTimer, linkTipTimer, linkTipTarget=null, linkTipReady=false;
   function cancelLinkTip() { clearTimeout(linkTipTimer);linkTipTarget=null;linkTipReady=false; }
   function hoverTip(event, target) {
-    if(!target.matches('a.entity-link,a[data-age]')) {cancelLinkTip();simpleTooltip(event,target.dataset.tip);return;}
+    if(!target.matches('a.entity-link,a[data-age]')) {cancelLinkTip();simpleTooltip(event,(target.closest('.chart-frame,.donut-layout,.ranking-scroll,.share-highlights') ? 'Year '+(target.dataset.tipYear ?? year ?? '—')+'\n' : '')+target.dataset.tip);return;}
     if(linkTipTarget!==target) {cancelLinkTip();linkTipTarget=target;$('chart-tooltip').hidden=true;linkTipTimer=setTimeout(()=>{if(linkTipTarget===target && target.isConnected){linkTipReady=true;simpleTooltip(pointer||event,target.dataset.tip);}},500);}
     else if(linkTipReady) simpleTooltip(event,target.dataset.tip);
   }
@@ -940,7 +1170,8 @@
     if (target?.closest('#chart-tooltip')) return;
     highlightKey(target);
     const plot = target?.closest('[data-plot]'), track = target?.closest('[data-track]'), tip = target?.closest('[data-tip]');
-    if (plot) showChartTooltip(pointer, plot);
+    if(target?.id==='world-map')mapTip(pointer);
+    else if (plot) showChartTooltip(pointer, plot);
     else if (track) showTimelineTooltip(pointer, track);
     else if (tip) hoverTip(pointer, tip);
     else $('chart-tooltip').hidden = true;
@@ -957,23 +1188,30 @@
     observer.disconnect(); charts.clear(); timelineViews.clear(); chartNumber = 0;
     const r = route(), type = H.TYPES.find(t => singular(t) === r.name);
     if (!live) $('chart-tooltip').hidden = true;
-    $('main').dataset.view = type ? 'entity' : r.name === 'browser' ? 'browser' : 'overview';
+    $('main').dataset.view = type ? 'entity' : r.name === 'browser' ? 'browser' : r.name === 'map' ? 'map' : 'overview';
     for (const list of $('main').querySelectorAll('[data-events]')) scrollPositions.set(list.dataset.events, list.scrollTop);
-    const markup = r.name === 'browser' ? browser(r.id || 'kingdoms') : type ? entityPage(type, r.id) : overview();
-    if (live) { const template = document.createElement('template'); template.innerHTML = markup; patchChildren($('main'), template.content); }
+    document.body.classList.toggle('map-open',r.name==='map');
+    if(r.name!=='map')$('main').style.height='';
+    const markup = r.name === 'map' ? mapPage() : r.name === 'browser' ? browser(r.id || 'kingdoms') : type ? entityPage(type, r.id) : overview();
+    if(r.name==='map' && $('world-map')) { /* Keep the live canvas and its backing store across year changes. */ }
+    else if (live) { const template = document.createElement('template'); template.innerHTML = markup; patchChildren($('main'), template.content); }
     else $('main').innerHTML = markup;
+    if(type || r.name==='browser')lastBrowserHash=location.hash;
+    document.querySelector('#view-nav a:nth-child(2)').href=lastBrowserHash;
     const entityType = type || (r.name === 'browser' ? (H.TYPES.includes(r.id) ? r.id : 'kingdoms') : null);
     $('entity-manager').hidden = !entityType;
-    const manager = entityType ? entityTabs(entityType) + '<span class="manager-entity">' + esc(type ? data.entity(type,r.id)?.name || '' : '') + '</span>' : '';
+    if(type && data.entity(type,r.id)) rememberTab(type,r.id);
+    const manager = entityType ? entityTabs(entityType) + renderTabs(entityType,type ? r.id : null) : '';
     if ($('entity-manager').innerHTML !== manager) $('entity-manager').innerHTML = manager;
-    document.querySelectorAll('#view-nav a').forEach(a => { if (a.hash.startsWith(r.name === 'browser' || type ? '#/browser' : '#/overview')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    document.querySelectorAll('#view-nav a').forEach(a => { if (a === document.querySelector('#view-nav a:nth-child(2)') ? !!(r.name==='browser'||type) : !type && r.name!=='browser' && a.hash === (r.name==='map'?'#/map':'#/overview')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     for (const list of $('main').querySelectorAll('[data-events]')) { paintEvents(list); list.scrollTop = scrollPositions.get(list.dataset.events) || 0; paintEvents(list); }
     for (const element of $('main').querySelectorAll('[data-scroll]')) element.scrollTop = scrollPositions.get(element.dataset.scroll) || 0;
     $('main').querySelectorAll('.chart-frame,.donut-layout,.ranking-scroll,.timeline-scroll,.share-highlights').forEach((el,i) => { el.classList.remove('chart-enter'); el.dataset.animation = location.hash + ':' + i; el.dataset.animate = String(allowAnimation); observer.observe(el); });
     observeNumbers(allowAnimation);
+    if(r.name==='map')drawMap();
     if (live) refreshHover();
     saveView();
-    document.title = `${type ? data.entity(type, r.id)?.name || 'Record' : r.name === 'browser' ? 'Entity browser' : data.world.name || 'World overview'} — HistoryBox`;
+    document.title = `${type ? data.entity(type, r.id)?.name || 'Record' : r.name === 'browser' ? 'Entity browser' : r.name === 'map' ? 'Map' : data.world.name || 'World overview'} — HistoryBox`;
     if (focusData && Object.keys(focusData).length) {
       const replacement = [...$('main').querySelectorAll('input,select,button,a[data-age],[data-plot],[data-track]')].find(e => Object.entries(focusData).every(([key, value]) => e.dataset[key] === value));
       if (replacement) { replacement.focus({ preventScroll: true }); if (start !== null && start !== undefined && replacement.setSelectionRange && ['text', 'search'].includes(replacement.type)) replacement.setSelectionRange(start, end); }
@@ -981,10 +1219,11 @@
   }
   function loadError(error) {
     const m=error.message || '';
+    if (/map|territory/i.test(m)) return 'This history has missing or inconsistent map records. Choose a matching pair of files recorded with the map-enabled HistoryBox mod.';
     if (/different world/.test(m)) return 'These files belong to different worlds. Choose both files from the same world folder.';
     if (/different save/.test(m)) return 'These files belong to different save slots. Choose both files from the same save folder.';
     if (/different recording|last annual|metadata disagree/.test(m)) return 'These files were saved at different times. Pause recording and copy both files together again.';
-    if (/overview.json requires|single metadata header/.test(m)) return 'This history uses an older or unsupported format. Record a new history with the current HistoryBox mod.';
+    if (/overview.json requires|single metadata header|fixed metadata header/.test(m)) return 'This history uses an older or unsupported format. Record a new history with the current HistoryBox mod.';
     if (/overview.json:/.test(m)) return 'The world records file could not be read. Select overview.json from your history folder.';
     if (/Annual history must/.test(m)) return 'Choose annual.jsonl for the annual history file.';
     if (/no observations/.test(m)) return 'This history has no recorded years yet. Enable recording in WorldBox and try again after a year passes.';
@@ -1005,6 +1244,8 @@
       await H.prepare(next, message => { $('load-status').textContent = message; });
       stopPlayback(); finishNumbers(); animated.clear(); numberSeen.clear();
       $('metadata').value = ''; $('annual').value = '';
+      mapCamera=null;mapSelection=null;mapFrame=null;
+      openTabs.clear();
       data = next; year = next.years.at(-1); age = null; customWindow = false; windowStart = null; windowEnd = null;
       legendHidden.clear(); eventViews.clear(); scrollPositions.clear(); preferences.clear(); pages.clear(); browserStates.clear(); tableStates.clear();
       const allNames = H.TYPES.flatMap(type => data.catalog(type).filter(e => e.name).map(e => ({name:e.name,id:e.id,type})));
@@ -1021,18 +1262,21 @@
         try { restored = JSON.parse(localStorage.getItem('historybox-view')); } catch {}
         if (restored?.worldKey !== JSON.stringify(data.world)) restored = null;
         if (restored) {
+          lastBrowserHash = restored.lastBrowserHash || "#/browser/kingdoms";
+          for(const [hash,position] of restored.pageScroll || []) pageScroll.set(hash,position);
           age = restored.age; if (age !== null && !data.ages[age]) age = null;
           customWindow = age === null && (restored.customWindow ?? (restored.windowSize !== undefined && restored.windowSize !== 'all'));
           windowStart = restored.windowStart;
           windowEnd = restored.windowEnd ?? (customWindow && Number.isFinite(Number(restored.windowSize)) ? (windowStart ?? data.years[0])+Number(restored.windowSize) : null);
           [windowStart,windowEnd] = range(); year = data.nearest(restored.year, scopeYears());
-          for (const [map, key] of [[preferences,'preferences'],[pages,'pages'],[browserStates,'browserStates'],[tableStates,'tableStates']]) for (const [k,v] of restored[key] || []) map.set(k,v);
+          for (const [map, key] of [[preferences,'preferences'],[pages,'pages'],[browserStates,'browserStates'],[tableStates,'tableStates'],[openTabs,'openTabs']]) for (const [k,v] of restored[key] || []) map.set(k,v);
           for (const [k,v] of restored.legends || []) legendHidden.set(k,new Set(v));
           $('speed').value = restored.speed || '1';
           history.replaceState(history.state, '', requestedHash || restored.hash || '#/overview');
         }
       } else {
         try { await worldStore({metadata: metadataText, annual}); } catch { $('announcement').textContent = 'Browser storage unavailable. Reload restoration is unavailable.'; }
+        lastBrowserHash='#/browser/kingdoms';pageScroll.clear();
         history.replaceState(null, '', '#/overview');
       }
       displayedHash = location.hash;
@@ -1098,6 +1342,7 @@
     $('navigation-shell').hidden = !open; $('timeline-shell').hidden = !open;
     $('view-nav').hidden = !open; $('context').hidden = !open;
     $('cancel-load').hidden = !data;
+    document.body.classList.toggle('map-open',open && route().name==='map');
     if (!open) { stopPlayback(); $('chart-tooltip').hidden = true; }
     updateTimelineSpace();
   }
@@ -1106,6 +1351,11 @@
   document.querySelector('.skip').addEventListener('click', e => { e.preventDefault(); $('main').focus(); });
   $('replace').addEventListener('click', () => { showWorld(false); $('load-status').textContent = ''; });
   $('cancel-load').addEventListener('click', () => { if (data) showWorld(true); });
+  $('download-notes').addEventListener('click',()=>{
+    if(!data)return;
+    const content=['HistoryBox data notes',data.world.name || 'Unnamed world',data.warningCount+' warnings','',...data.warnings].join('\n');
+    const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='HistoryBox-data-notes.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
   $('diagnostics-button').addEventListener('click', () => $('diagnostics').showModal());
   $('previous').addEventListener('click', () => { const ys = scopeYears(); selectYear(ys[ys.indexOf(year) - 1]); });
   $('next').addEventListener('click', () => { const ys = scopeYears(); selectYear(ys[ys.indexOf(year) + 1]); });
@@ -1144,13 +1394,16 @@
   }
   $('window-start').addEventListener('change', setWindow);
   $('window-end').addEventListener('change', setWindow);
+  document.addEventListener('click', e => {
+    const anchor=e.target.closest('a[href^="#/"]');
+    if(data && anchor && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button===0)pageScroll.set(displayedHash,scrollY);
+  },true);
   window.addEventListener('hashchange', () => {
     if (!data) return;
-    pageScroll.set(displayedHash, scrollY);
     displayedHash = location.hash;
     pages.delete('entity-records'); render();
-    // The route cache captures the exact outgoing position, even if a pending scroll
-    // event has not yet updated this entry's persisted history state.
+    // Native fragment navigation may already have scrolled to zero. Use the
+    // outgoing click/scroll snapshot, never that post-navigation position.
     const position = pageScroll.get(displayedHash) ?? (history.state?.route === displayedHash ? history.state.scroll : 0);
     window.scrollTo({top:position || 0,behavior:'instant'});
   });
@@ -1206,6 +1459,7 @@
     if (track) showTimelineTooltip(event, track);
   });
   $('main').addEventListener('pointerout', event => {
+    if(event.target.id==='world-map')deferTooltipHide();
     const plot = event.target.closest('[data-plot]');
     const track = event.target.closest('[data-track]');
     const tip=event.target.closest('[data-tip]');if(tip && !tip.contains(event.relatedTarget)){cancelLinkTip();deferTooltipHide();}

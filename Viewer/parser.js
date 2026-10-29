@@ -51,6 +51,11 @@
   class Dataset {
     constructor(metadata) {
       if (!metadata || typeof metadata !== 'object' || !metadata.metadata || typeof metadata.metadata.id !== 'string' || !metadata.metadata.id || !(metadata.metadata.name === null || typeof metadata.metadata.name === 'string') || !(metadata.metadata.slot === null || Number.isSafeInteger(metadata.metadata.slot) && metadata.metadata.slot >= 0) || !Number.isSafeInteger(metadata.metadata.year) || metadata.metadata.year < 0) throw new Error('overview.json requires metadata with id, name, slot, and last recorded year. Re-export older histories with the updated Box.');
+      const map=metadata.map;
+      if(!map || !Number.isSafeInteger(map.width) || !Number.isSafeInteger(map.height) || map.width<1 || map.height<1 || !Number.isSafeInteger(map.width*map.height) || !Array.isArray(map.elevation) || map.elevation.length!==map.width*map.height || map.elevation.some(v=>!Number.isInteger(v)||v<0||v>3)) throw new Error('Unsupported or invalid map baseline.');
+      this.mapWidth=map.width;this.mapHeight=map.height;
+      this.mapBaseline=Uint8Array.from(map.elevation);
+      this.mapCheckpoints=new Map();
       this.raw = metadata;
       this.hasCharacters = Object.hasOwn(metadata,'characters');
       this.familyCache = new Map();
@@ -164,6 +169,24 @@
       const year = record?.world?.year;
       if (!Number.isSafeInteger(year) || year < 0) throw new Error(`Line ${line}: world.year must be a nonnegative safe integer.`);
       if (this.records.has(year)) throw new Error(`Line ${line}: duplicate recorded year ${year}.`);
+      if(!Array.isArray(record.map)) throw new Error('Missing annual map changes.');
+      let previousZone=-1;
+      for(const patch of record.map) {
+        if(!Array.isArray(patch)||patch.length!==2||!Number.isSafeInteger(patch[0])||patch[0]<=previousZone||patch[0]>=this.mapBaseline.length||!Number.isInteger(patch[1])||patch[1]<0||patch[1]>3) throw new Error('Invalid annual map changes.');
+        previousZone=patch[0];
+      }
+      const claimedZones=new Set();
+      for(const village of record.villages||[]) {
+        const zones=village.territory;
+        if(!Array.isArray(zones)||!zones.length)throw new Error('Invalid village map territory.');
+        let previous=-1;
+        for(let i=0;i<zones.length;i++) {
+          const zone=zones[i];
+          if(!Number.isSafeInteger(zone)||zone < (i===0?-1:0)||zone>=this.mapBaseline.length||(i>0&&zone<=previous)||claimedZones.has(zone))throw new Error('Invalid or overlapping village map territory.');
+          if(zone>=0)claimedZones.add(zone);
+          if(i>0)previous=zone;
+        }
+      }
       const indexes = new Map(), badOwners = new Set();
       for (const type of ['kingdoms', 'villages', 'characters', 'wars']) {
         if (type === 'characters' && record.characters === undefined) { if(this.hasCharacters)this.warn('Year '+year+': character observations are missing; character coverage is unavailable.');indexes.set(type,new Map()); continue; }
@@ -179,7 +202,7 @@
           const histories = this.observations.get(type);
           if (!histories.has(id)) histories.set(id, []);
           histories.get(id).push({ year, record: item });
-          const fields = type === 'villages' ? [...ADDITIVE, 'loyalty'] : type === 'wars' ? ['attacker_deaths', 'defender_deaths'] : type === 'characters' ? ['level','coins','kills'] : [];
+          const fields = type === 'villages' ? [...ADDITIVE.filter(f=>f!=='territory'), 'loyalty'] : type === 'wars' ? ['attacker_deaths', 'defender_deaths'] : type === 'characters' ? ['level','coins','kills'] : [];
           for (const field of fields) if (!numeric(item[field]) || (field !== 'loyalty' && item[field] < 0)) this.warn(`Year ${year}, ${type} ${id}: invalid or missing ${field}.`);
           if (type === 'characters') {
             for (const [field,target] of [['kingdom_id','kingdoms'],['village_id','villages']]) if (item[field] !== null) this.checkReference(target,item[field],'Character '+id);
@@ -238,6 +261,7 @@
     finish() {
       this.years = [...this.records.keys()].sort((a, b) => a - b);
       if (!this.years.length) throw new Error('annual.jsonl has no observations.');
+      if(this.records.get(this.years[0]).raw.map.length)throw new Error('First annual map must match the map baseline.');
       this.yearIndex = new Map(this.years.map((y, i) => [y, i]));
       if(this.hasCharacters && [...this.records.values()].some(r=>r.raw.kingdoms.some(k=>!Object.hasOwn(k,'king_id')) || r.raw.villages.some(v=>!Object.hasOwn(v,'leader_id'))))this.warn('Older observations lack ruler appointment IDs. A single recorded king or leader claim cannot be independently verified; contradictory claims are withheld.');
       this.gaps = this.years.slice(1).flatMap((y, i) => y > this.years[i] + 1 ? [[this.years[i], y]] : []);
@@ -251,6 +275,19 @@
       }
       return this;
     }
+    // Reconstruct absolute terrain from an immutable baseline; bounded checkpoints
+    // make backward seeking safe without retaining a full map for every year.
+    terrainAt(year) {
+      const target=this.yearIndex.get(year);
+      if(target===undefined)return null;
+      let from=-1,source=this.mapBaseline;
+      for(const [index,state] of this.mapCheckpoints)if(index<=target&&index>from){from=index;source=state;}
+      const terrain=source.slice();
+      for(let i=from+1;i<=target;i++)for(const [zone,value] of this.records.get(this.years[i]).raw.map)terrain[zone]=value;
+      boundedSet(this.mapCheckpoints,target,terrain.slice(),12);
+      return terrain;
+    }
+    territoryCount(village) { return village.territory.length-(village.territory[0]===-1?1:0); }
     history(type, id) { return this.observations.get(type)?.get(key(id)) || []; }
     observed(type, id, year) { return this.records.get(year)?.indexes.get(type)?.get(key(id)) || null; }
     periodYears(ageIndex = null) { const age = this.ages[ageIndex]; return ageIndex === null ? this.years : this.years.filter(y => intervalStatus(age, y) === 'active'); }
@@ -312,7 +349,7 @@
       const record = this.records.get(year), item = this.observed(type, id, year);
       if (type === 'world') {
         out = { complete: true };
-        for (const field of ADDITIVE) out[field] = sum(record.raw.villages.map(v => this.validStat(v[field])));
+        for (const field of ADDITIVE) out[field] = sum(record.raw.villages.map(v => field==='territory'?this.territoryCount(v):this.validStat(v[field])));
         out.population = this.validStat(record.raw.world.global_population);
         SPECIES.forEach(s => { out[s] = this.validStat(record.raw.world[s]); });
         out.kingdoms = record.raw.kingdoms.length; out.villages = record.raw.villages.length; out.wars = record.raw.wars.length;
@@ -322,7 +359,7 @@
         for(const field of ['level','coins','kills']) out[field]=this.validStat(item[field]);
       } else if (type === 'villages' && item) {
         out = { kingdom_id: item.kingdom_id, complete: true };
-        [...ADDITIVE, 'loyalty'].forEach(f => { out[f] = this.validStat(item[f], f === 'loyalty'); });
+        [...ADDITIVE, 'loyalty'].forEach(f => { out[f] = f==='territory'?this.territoryCount(item):this.validStat(item[f], f === 'loyalty'); });
       } else if (type === 'kingdoms' && item) {
         const complete = !record.badOwners.has(key(id));
         const villages = Array.isArray(item.cities) ? item.cities : [];
@@ -514,6 +551,12 @@
         if(type==='alliances') { const statuses=this.catalog(type).map(e=>intervalStatus(e,y));return statuses.some(s=>s==='uncertain'||s==='unknown')?null:statuses.filter(s=>s==='active').length; }
         return this.records.get(y)?.raw[type]?.length ?? null;
       };
+      out.recorded = {}; out.ended = {};
+      const [lo,hi]=bounds || [years[0],years.at(-1)];
+      for(const type of TYPES) {
+        out.recorded[type]=this.catalog(type).filter(e=> type==='alliances' ? years.some(y=>intervalStatus(e,y)==='active') : this.history(type,e.id).some(p=>allowed.has(p.year))).length;
+        out.ended[type]=this.catalog(type).filter(e=>{const end=boundary(e.end_year);return end && end.lo>=lo && end.hi<=hi;}).length;
+      }
       out.changes = {};
       for(const metric of ['population',...SPECIES,...TYPES]) {
         const values=endpoints.map(y=>TYPES.includes(metric)?count(metric,y):this.snapshot('world','',y)?.[metric]);
@@ -614,8 +657,10 @@
           if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error(`annual.jsonl line ${line}: expected an object.`);
           if (!header) {
             if (Object.keys(record).length !== 1 || !record.metadata) throw new Error('annual.jsonl must begin with a single metadata header.');
-            const canonical = v => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k,canonical(v[k])])) : v;
-            if (JSON.stringify(canonical(record.metadata)) !== JSON.stringify(canonical(metadata.metadata))) throw new Error(record.metadata.id !== metadata.metadata.id ? 'Files describe a different world.' : record.metadata.slot !== metadata.metadata.slot ? 'Files describe a different save.' : 'Files describe a different recording time.');
+            const identity=record.metadata;
+            if(!identity || typeof identity!=='object' || Array.isArray(identity) || Object.keys(identity).sort().join(',')!=='id,slot')throw new Error('annual.jsonl requires the fixed metadata header.');
+            if(identity.id!==metadata.metadata.id)throw new Error('Files describe a different world.');
+            if(identity.slot!==metadata.metadata.slot)throw new Error('Files describe a different save.');
             header = true; continue;
           }
           if (record.metadata !== undefined) throw new Error('annual.jsonl metadata must appear only once, at the beginning.');

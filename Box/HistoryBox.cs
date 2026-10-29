@@ -143,6 +143,7 @@ namespace HistoryBox
 
         private void EndSession()
         {
+            WorldReader.ClearMapCache();
             session = null;
             tracker = null;
             observedWorld = null;
@@ -157,6 +158,15 @@ namespace HistoryBox
         }
     }
 
+    internal static class Performance
+    {
+        private static readonly bool Enabled = Environment.GetEnvironmentVariable("HISTORYBOX_PROFILE") == "1";
+        public static long Begin() { return System.Diagnostics.Stopwatch.GetTimestamp(); }
+        public static void End(string stage, long start)
+        {
+            if (Enabled) Debug.Log("[HistoryBox timing] " + stage + " " + ((System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency).ToString("F2", CultureInfo.InvariantCulture) + " ms");
+        }
+    }
     internal interface IInterval
     {
         object End { get; set; }
@@ -217,12 +227,13 @@ namespace HistoryBox
     internal sealed class MetadataRecord
     {
         [DataMember(Name = "metadata", Order = 1)] public WorldMetadata World = new WorldMetadata();
-        [DataMember(Name = "ages", Order = 2)] public List<AgeMetadata> Ages = new List<AgeMetadata>();
-        [DataMember(Name = "kingdoms", Order = 3)] public List<KingdomMetadata> Kingdoms = new List<KingdomMetadata>();
-        [DataMember(Name = "villages", Order = 4)] public List<VillageMetadata> Villages = new List<VillageMetadata>();
-        [DataMember(Name = "characters", Order = 5)] public List<CharacterMetadata> Characters = new List<CharacterMetadata>();
-        [DataMember(Name = "wars", Order = 6)] public List<WarMetadata> Wars = new List<WarMetadata>();
-        [DataMember(Name = "alliances", Order = 7)] public List<AllianceMetadata> Alliances = new List<AllianceMetadata>();
+        [DataMember(Name = "map", Order = 2)] public MapMetadata Map = new MapMetadata();
+        [DataMember(Name = "ages", Order = 3)] public List<AgeMetadata> Ages = new List<AgeMetadata>();
+        [DataMember(Name = "kingdoms", Order = 4)] public List<KingdomMetadata> Kingdoms = new List<KingdomMetadata>();
+        [DataMember(Name = "villages", Order = 5)] public List<VillageMetadata> Villages = new List<VillageMetadata>();
+        [DataMember(Name = "characters", Order = 6)] public List<CharacterMetadata> Characters = new List<CharacterMetadata>();
+        [DataMember(Name = "wars", Order = 7)] public List<WarMetadata> Wars = new List<WarMetadata>();
+        [DataMember(Name = "alliances", Order = 8)] public List<AllianceMetadata> Alliances = new List<AllianceMetadata>();
 
         public bool Update(AnnualRecord record, int previous)
         {
@@ -233,6 +244,18 @@ namespace HistoryBox
             {
                 World.Name = record.WorldName;
                 changed = true;
+            }
+
+            if (Map.Width == 0 && Map.Height == 0 && Map.Elevation.Count == 0)
+            {
+                Map.Width = record.MapWidth;
+                Map.Height = record.MapHeight;
+                Map.Elevation = new List<int>(record.Elevation);
+                changed = true;
+            }
+            else if (Map.Width != record.MapWidth || Map.Height != record.MapHeight || Map.Elevation.Count != record.Elevation.Count)
+            {
+                throw new InvalidDataException("Recorded map dimensions changed.");
             }
 
             changed |= UpdateAges(record.Age, year, previous);
@@ -825,6 +848,14 @@ namespace HistoryBox
     }
 
     [DataContract]
+    internal sealed class MapMetadata
+    {
+        [DataMember(Name = "width", Order = 1)] public int Width;
+        [DataMember(Name = "height", Order = 2)] public int Height;
+        [DataMember(Name = "elevation", Order = 3)] public List<int> Elevation = new List<int>();
+    }
+
+    [DataContract]
     internal sealed class AgeMetadata : IInterval
     {
         [DataMember(Name = "name", Order = 1)] public string Name;
@@ -928,11 +959,15 @@ namespace HistoryBox
     [DataContract]
     internal sealed class AnnualRecord
     {
-        [DataMember(Name = "world", Order = 1)] public WorldAnnual World = new WorldAnnual();
-        [DataMember(Name = "kingdoms", Order = 2)] public List<KingdomAnnual> Kingdoms = new List<KingdomAnnual>();
-        [DataMember(Name = "villages", Order = 3)] public List<VillageAnnual> Villages = new List<VillageAnnual>();
-        [DataMember(Name = "characters", Order = 4)] public List<CharacterAnnual> Characters = new List<CharacterAnnual>();
-        [DataMember(Name = "wars", Order = 5)] public List<WarAnnual> Wars = new List<WarAnnual>();
+        [DataMember(Name = "map", Order = 1)] public List<int[]> Map = new List<int[]>();
+        [DataMember(Name = "world", Order = 2)] public WorldAnnual World = new WorldAnnual();
+        [DataMember(Name = "kingdoms", Order = 3)] public List<KingdomAnnual> Kingdoms = new List<KingdomAnnual>();
+        [DataMember(Name = "villages", Order = 4)] public List<VillageAnnual> Villages = new List<VillageAnnual>();
+        [DataMember(Name = "characters", Order = 5)] public List<CharacterAnnual> Characters = new List<CharacterAnnual>();
+        [DataMember(Name = "wars", Order = 6)] public List<WarAnnual> Wars = new List<WarAnnual>();
+        public int MapWidth;
+        public int MapHeight;
+        public List<int> Elevation = new List<int>();
         public string WorldName;
         public string Age;
         public List<AllianceState> Alliances = new List<AllianceState>();
@@ -988,11 +1023,11 @@ namespace HistoryBox
         [DataMember(Name = "dwarf", Order = 7)] public int Dwarf;
         [DataMember(Name = "army", Order = 8)] public int Army;
         [DataMember(Name = "loyalty", Order = 9)] public int Loyalty;
-        [DataMember(Name = "territory", Order = 10)] public int Territory;
-        [DataMember(Name = "houses", Order = 11)] public int Houses;
-        [DataMember(Name = "food", Order = 12)] public int Food;
-        [DataMember(Name = "coins", Order = 13)] public int Coins;
-        [DataMember(Name = "leader_id", Order = 14)] public long? LeaderId;
+        [DataMember(Name = "houses", Order = 10)] public int Houses;
+        [DataMember(Name = "food", Order = 11)] public int Food;
+        [DataMember(Name = "coins", Order = 12)] public int Coins;
+        [DataMember(Name = "leader_id", Order = 13)] public long? LeaderId;
+        [DataMember(Name = "territory", Order = 14)] public List<int> Territory = new List<int>();
         public string Name;
         public string Species;
 
@@ -1070,14 +1105,19 @@ namespace HistoryBox
             AnnualRecord record = new AnnualRecord { WorldName = GetWorldName(world) };
             record.World.Year = year;
             record.Age = ReadAge(world);
+            long timing = Performance.Begin();
+            ZoneMap map = ReadMap(world, record);
+            Performance.End("capture-map", timing);
+            timing = Performance.Begin();
             ReadWorldPopulation(world, record.World);
             ReadKingdoms(world, record.Kingdoms);
-            ReadVillages(world, record.Villages);
+            ReadVillages(world, record.Villages, map);
             ReadCharacters(world, record, trackedCharacters, year);
             ReadWars(world, record.Wars);
             ReadAlliances(world, record.Alliances);
             NormalizeOwnership(record);
             Validate(record);
+            Performance.End("capture-entities", timing);
             if (GetYear(world) != year) throw new InvalidDataException("World year changed during capture.");
             return record;
         }
@@ -1107,10 +1147,21 @@ namespace HistoryBox
         internal static void Validate(AnnualRecord record)
         {
             if (record.World == null || record.World.Year < 0) throw new InvalidDataException("Missing annual world/year.");
+            if (record.MapWidth <= 0 || record.MapHeight <= 0 || (long)record.MapWidth * record.MapHeight != record.Elevation.Count) throw new InvalidDataException("Invalid map dimensions or elevation count.");
+            foreach (int elevation in record.Elevation) if (elevation < 0 || elevation > 3) throw new InvalidDataException("Invalid map elevation category.");
+            HashSet<int> assignedZones = new HashSet<int>();
             if (record.World.GlobalPopulation < 0 || record.World.Human < 0 || record.World.Elf < 0 || record.World.Orc < 0 || record.World.Dwarf < 0 || (long)record.World.Human + record.World.Elf + record.World.Orc + record.World.Dwarf != record.World.GlobalPopulation) throw new InvalidDataException("Inconsistent world population.");
             foreach (VillageAnnual v in record.Villages)
             {
-                if (v.Population < 0 || v.Human < 0 || v.Elf < 0 || v.Orc < 0 || v.Dwarf < 0 || v.Army < 0 || v.Territory < 0 || v.Houses < 0 || v.Food < 0 || v.Coins < 0 || (long)v.Human + v.Elf + v.Orc + v.Dwarf > v.Population) throw new InvalidDataException("Invalid village measurements: " + v.Id);
+                if (v.Population < 0 || v.Human < 0 || v.Elf < 0 || v.Orc < 0 || v.Dwarf < 0 || v.Army < 0 || v.Houses < 0 || v.Food < 0 || v.Coins < 0 || (long)v.Human + v.Elf + v.Orc + v.Dwarf > v.Population) throw new InvalidDataException("Invalid village measurements: " + v.Id);
+                if (v.Territory == null || v.Territory.Count == 0) throw new InvalidDataException("Village territory must contain a bonfire ID or -1: " + v.Id);
+                for (int i = 0; i < v.Territory.Count; i++)
+                {
+                    int id = v.Territory[i];
+                    if (i > 1 && id <= v.Territory[i - 1]) throw new InvalidDataException("Unsorted village territory zones: " + v.Id);
+                    if (id == -1 && i == 0) continue;
+                    if (id < 0 || id >= record.Elevation.Count || !assignedZones.Add(id)) throw new InvalidDataException("Invalid or duplicated territory zone: " + id);
+                }
             }
             HashSet<long> characterIds = new HashSet<long>();
             HashSet<long> villageIds = new HashSet<long>();
@@ -1137,6 +1188,120 @@ namespace HistoryBox
             foreach (KingdomAnnual k in record.Kingdoms) if (k.KingId.HasValue && !record.Characters.Exists(c => c.Id == k.KingId && c.Role == "king" && c.KingdomId == k.Id)) throw new InvalidDataException("King not captured: " + k.Id);
             foreach (VillageAnnual v in record.Villages) if (v.LeaderId.HasValue && !record.Characters.Exists(c => c.Id == v.LeaderId && c.Role == "leader" && c.VillageId == v.Id)) throw new InvalidDataException("Leader not captured: " + v.Id);
             foreach (WarAnnual war in record.Wars) if (war.AttackerDeaths < 0 || war.DefenderDeaths < 0) throw new InvalidDataException("Invalid war casualties: " + war.Id);
+        }
+
+        // Every WorldBox TileZone is translated into our own bottom-left row-major ID.
+        // No game-internal zone ID or enumeration order is exposed in the output.
+        private sealed class ZoneMap
+        {
+            public int Width;
+            public int Height;
+            public Dictionary<long, int> Ids = new Dictionary<long, int>();
+            public Dictionary<int, object> Zones = new Dictionary<int, object>();
+
+            public int Index(object zone)
+            {
+                if (zone == null) throw new InvalidDataException("Missing WorldBox tile zone.");
+                long internalId = Reader.Id(zone);
+                int index;
+                if (!Ids.TryGetValue(internalId, out index)) throw new InvalidDataException("Unmapped WorldBox tile zone: " + internalId);
+                return index;
+            }
+        }
+
+        private static object cachedWorld, cachedCalculator;
+        private static ZoneMap cachedMap;
+        private static readonly Dictionary<TileTypeBase, int> terrainClasses = new Dictionary<TileTypeBase, int>();
+        internal static void ClearMapCache() { cachedWorld = null; cachedCalculator = null; cachedMap = null; terrainClasses.Clear(); }
+        private static ZoneMap ReadMap(object world, AnnualRecord record)
+        {
+            object calculator = Reader.Require(world, "zone_calculator");
+            int width = Reader.Int(Reader.Require(calculator, "zones_total_x")), height = Reader.Int(Reader.Require(calculator, "zones_total_y"));
+            if (width <= 0 || height <= 0 || (long)width * height > int.MaxValue || ((long)MapBox.width + 7) / 8 != width || ((long)MapBox.height + 7) / 8 != height) throw new InvalidDataException("Invalid WorldBox zone grid dimensions.");
+            bool rebuild = !ReferenceEquals(cachedWorld, world) || !ReferenceEquals(cachedCalculator, calculator) || cachedMap == null || cachedMap.Width != width || cachedMap.Height != height;
+            ZoneMap result = rebuild ? new ZoneMap { Width = width, Height = height } : cachedMap;
+            int count = width * height;
+            // A per-capture array owns the immutable observation; only lookup geometry
+            // and asset classifications survive between captures, never elevations.
+            int[] elevations = new int[count];
+            bool[] seen = new bool[count]; int zones = 0;
+            foreach (object raw in Reader.Enumerate(Reader.Require(calculator, "zones")))
+            {
+                TileZone zone = raw as TileZone;
+                if (zone == null) throw new InvalidDataException("Missing WorldBox tile zone.");
+                int x = zone.x, y = zone.y;
+                if (x < 0 || x >= width || y < 0 || y >= height) throw new InvalidDataException("Zone coordinate is outside map.");
+                int index = y * width + x;
+                if (seen[index]) throw new InvalidDataException("Duplicate WorldBox zone coordinate.");
+                seen[index] = true; zones++;
+                if (rebuild)
+                {
+                    if (result.Ids.ContainsKey(zone.id)) throw new InvalidDataException("Duplicate WorldBox zone ID.");
+                    result.Ids.Add(zone.id, index); result.Zones.Add(index, zone);
+                }
+                else if (!ReferenceEquals(result.Zones[index], zone) || !result.Ids.ContainsKey(zone.id) || result.Ids[zone.id] != index)
+                {
+                    ClearMapCache(); return ReadMap(world, record); // Same MapBox instance may reload geometry.
+                }
+                int water = 0, plain = 0, hill = 0, mountain = 0, tiles = 0; ulong positions = 0;
+                if (zone.tiles == null) throw new InvalidDataException("Missing zone tiles.");
+                foreach (WorldTile tile in zone.tiles)
+                {
+                    if (tile == null) continue;
+                    int tx = tile.x, ty = tile.y;
+                    if (!ReferenceEquals(tile.zone, zone) || tx < 0 || ty < 0 || tx >= MapBox.width || ty >= MapBox.height || tx / 8 != x || ty / 8 != y) throw new InvalidDataException("Tile geometry disagrees with its zone.");
+                    ulong bit = 1UL << ((ty % 8) * 8 + tx % 8);
+                    if ((positions & bit) != 0) throw new InvalidDataException("Duplicate tile in WorldBox zone.");
+                    positions |= bit;
+                    TileTypeBase type = (TileTypeBase)tile.main_type ?? Reader.Get(tile, "cur_tile_type") as TileTypeBase;
+                    if (type == null) throw new InvalidDataException("Tile has no terrain type.");
+                    int category;
+                    if (!terrainClasses.TryGetValue(type, out category)) { category = TileElevation(type); terrainClasses.Add(type, category); }
+                    if (category == 0) water++; else if (category == 1) plain++; else if (category == 2) hill++; else mountain++;
+                    tiles++;
+                }
+                if (tiles != Math.Min(8, MapBox.width - x * 8) * Math.Min(8, MapBox.height - y * 8)) throw new InvalidDataException("Incomplete WorldBox zone tile coverage.");
+                int chosen = 0, majority = water;
+                if (plain >= majority) { chosen = 1; majority = plain; }
+                if (hill >= majority) { chosen = 2; majority = hill; }
+                if (mountain >= majority) chosen = 3;
+                elevations[index] = chosen;
+            }
+            if (zones != count) throw new InvalidDataException("Incomplete WorldBox zone grid.");
+            cachedWorld = world; cachedCalculator = calculator; cachedMap = result;
+            record.MapWidth = width; record.MapHeight = height; record.Elevation = new List<int>(elevations);
+            return result;
+        }
+        private static int TileElevation(TileTypeBase type)
+        {
+            string id = type.id;
+            if (type.summit || type.mountains || id == "summit" || id == "mountains") return 3;
+            if (type.rocks || id == "hills") return 2;
+            if (type.ocean || id == "deep_ocean" || id == "close_ocean" || id == "shallow_waters" || id == "pit_deep_ocean" || id == "pit_close_ocean" || id == "pit_shallow_waters") return 0;
+            if (type.ground || id == "sand" || id == "soil_low" || id == "soil_high" || type.lava || id == "grey_goo") return 1;
+            throw new InvalidDataException("Unclassified WorldBox terrain type: " + (id ?? "null"));
+        }
+
+        private static int BonfireZone(object world, object city, ZoneMap map, List<int> territory)
+        {
+            object buildings = Reader.CallString(city, "getBuildingListOfID", "bonfire");
+            if (buildings == null) return -1;
+            int result = -1;
+            foreach (object building in Reader.Enumerate(buildings))
+            {
+                if (building == null || Reader.Inactive(building)) continue;
+                if (Reader.Call(building, "isNormal") as bool? != true) continue;
+                object data = Reader.Require(building, "data");
+                int x = Reader.Int(Reader.Require(data, "mainX")), y = Reader.Int(Reader.Require(data, "mainY"));
+                if (x < 0 || x >= MapBox.width || y < 0 || y >= MapBox.height) throw new InvalidDataException("Bonfire anchor is outside the world map.");
+                object tile = Reader.CallXY(world, "GetTile", x, y);
+                object zone = Reader.Require(tile, "zone");
+                int id = map.Index(zone);
+                if (!territory.Contains(id)) continue;
+                if (result >= 0 && result != id) throw new InvalidDataException("Multiple bonfire zones found for one village.");
+                result = id;
+            }
+            return result;
         }
 
         private static string ReadAge(object world)
@@ -1213,7 +1378,7 @@ namespace HistoryBox
             result.Sort((a, b) => a.Id.CompareTo(b.Id));
         }
 
-        private static void ReadVillages(object world, List<VillageAnnual> result)
+        private static void ReadVillages(object world, List<VillageAnnual> result, ZoneMap map)
         {
             HashSet<long> ids = new HashSet<long>();
 
@@ -1242,11 +1407,24 @@ namespace HistoryBox
                     Population = Reader.Int(Reader.Call(city, "getPopulationPeople")),
                     Army = Reader.Int(Reader.Call(city, "countWarriors")),
                     Loyalty = Reader.Int(Reader.Call(city, "getCachedLoyalty")),
-                    Territory = CountTerritory(city),
                     Houses = Reader.Int(Reader.Call(city, "getHouseCurrent")),
                     Food = Reader.Int(Reader.Call(city, "getTotalFood")),
                     Coins = Reader.Int(Reader.Call(city, "countTotalMoney"))
                 };
+
+                HashSet<int> claimed = new HashSet<int>();
+                foreach (object zone in Reader.Enumerate(Reader.Require(city, "zones")))
+                {
+                    if (zone == null || !claimed.Add(map.Index(zone))) throw new InvalidDataException("Duplicate or missing village zone: " + id);
+                    object owner = Reader.Get(zone, "city");
+                    if (owner != null && !ReferenceEquals(owner, city)) throw new InvalidDataException("Village and zone ownership disagree: " + id);
+                }
+                List<int> territory = new List<int>(claimed);
+                territory.Sort();
+                int bonfire = BonfireZone(world, city, map, territory);
+                if (bonfire >= 0) territory.Remove(bonfire);
+                entry.Territory.Add(bonfire);
+                entry.Territory.AddRange(territory);
 
                 foreach (object actor in Reader.Enumerate(Reader.Call(city, "getUnits")))
                 {
@@ -1348,30 +1526,6 @@ namespace HistoryBox
             }
 
             return species;
-        }
-
-        private static int CountTerritory(object city)
-        {
-            int result = 0;
-
-            foreach (object zone in Reader.Enumerate(Reader.Require(city, "zones")))
-            {
-                if (zone == null)
-                {
-                    continue;
-                }
-
-                ICollection tiles = Reader.Require(zone, "tiles") as ICollection;
-
-                if (tiles == null)
-                {
-                    throw new InvalidDataException("WorldBox zone tiles are not countable.");
-                }
-
-                result = checked(result + tiles.Count);
-            }
-
-            return result;
         }
 
         private static void ReadWars(object world, List<WarAnnual> result)
@@ -1524,40 +1678,42 @@ namespace HistoryBox
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
+        private static readonly Dictionary<Type, Dictionary<string, MemberInfo>> members = new Dictionary<Type, Dictionary<string, MemberInfo>>();
+        private static readonly Dictionary<Type, Dictionary<string, MethodInfo>> methods = new Dictionary<Type, Dictionary<string, MethodInfo>>();
+        private static MemberInfo FindMember(Type source, string name)
+        {
+            Dictionary<string, MemberInfo> cache;
+            if (!members.TryGetValue(source, out cache)) { cache = new Dictionary<string, MemberInfo>(); members.Add(source, cache); }
+            MemberInfo member;
+            if (cache.TryGetValue(name, out member)) return member;
+            for (Type type = source; type != null; type = type.BaseType)
+            {
+                member = type.GetField(name, Flags);
+                if (member == null) { PropertyInfo property = type.GetProperty(name, Flags); if (property != null && property.GetIndexParameters().Length == 0) member = property; }
+                if (member != null) break;
+            }
+            cache.Add(name, member); return member;
+        }
+        private static MethodInfo FindMethod(Type type, string name, Type[] parameters)
+        {
+            Dictionary<string, MethodInfo> cache;
+            if (!methods.TryGetValue(type, out cache)) { cache = new Dictionary<string, MethodInfo>(); methods.Add(type, cache); }
+            string key = name + (parameters.Length == 0 ? "" : parameters.Length == 2 ? ":xy" : ":string");
+            MethodInfo method;
+            if (!cache.TryGetValue(key, out method)) { method = type.GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, parameters, null); cache.Add(key, method); }
+            return method;
+        }
         public static object Get(object source, string name)
         {
-            if (source == null)
-            {
-                return null;
-            }
-
-            for (Type type = source.GetType(); type != null; type = type.BaseType)
-            {
-                FieldInfo field = type.GetField(name, Flags);
-
-                if (field != null)
-                {
-                    return field.GetValue(source);
-                }
-
-                PropertyInfo property = type.GetProperty(name, Flags);
-
-                if (property != null && property.GetIndexParameters().Length == 0)
-                {
-                    return property.GetValue(source, null);
-                }
-            }
-
-            return null;
+            if (source == null) return null;
+            MemberInfo member = FindMember(source.GetType(), name);
+            FieldInfo field = member as FieldInfo;
+            return field != null ? field.GetValue(source) : member is PropertyInfo ? ((PropertyInfo)member).GetValue(source, null) : null;
         }
-
         public static object Member(object source, string name)
         {
-            for (Type type = source == null ? null : source.GetType(); type != null; type = type.BaseType)
-            {
-                if (type.GetField(name, Flags) != null || type.GetProperty(name, Flags) != null) return Get(source, name);
-            }
-            throw new MissingMemberException(source == null ? "null" : source.GetType().Name, name);
+            if (source == null || FindMember(source.GetType(), name) == null) throw new MissingMemberException(source == null ? "null" : source.GetType().Name, name);
+            return Get(source, name);
         }
 
         public static object Require(object source, string name)
@@ -1579,7 +1735,7 @@ namespace HistoryBox
                 throw new InvalidOperationException("Cannot call " + method + " on null.");
             }
 
-            MethodInfo info = source.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+            MethodInfo info = FindMethod(source.GetType(), method, Type.EmptyTypes);
 
             if (info == null)
             {
@@ -1589,6 +1745,22 @@ namespace HistoryBox
             return info.Invoke(source, null);
         }
 
+        public static object CallXY(object source, string method, int x, int y)
+        {
+            if (source == null) throw new InvalidOperationException("Cannot call " + method + " on null.");
+            MethodInfo info = FindMethod(source.GetType(), method, new Type[] { typeof(int), typeof(int) });
+            if (info == null) throw new MissingMethodException(source.GetType().Name, method);
+            return info.Invoke(source, new object[] { x, y });
+        }
+
+        public static object CallString(object source, string method, string value)
+        {
+            if (source == null) throw new InvalidOperationException("Cannot call " + method + " on null.");
+            MethodInfo info = FindMethod(source.GetType(), method, new Type[] { typeof(string) });
+            if (info == null) throw new MissingMethodException(source.GetType().Name, method);
+            return info.Invoke(source, new object[] { value });
+        }
+
         public static object TryCall(object source, string method)
         {
             if (source == null)
@@ -1596,7 +1768,7 @@ namespace HistoryBox
                 return null;
             }
 
-            MethodInfo info = source.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+            MethodInfo info = FindMethod(source.GetType(), method, Type.EmptyTypes);
             return info == null ? null : info.Invoke(source, null);
         }
 
@@ -1716,6 +1888,7 @@ namespace HistoryBox
     {
         private string directory;
         private MetadataRecord metadata;
+        private int[] committedElevation;
         public string WorldId { get; private set; }
         public int? Slot { get; private set; }
         public int LastYear { get; private set; }
@@ -1723,6 +1896,7 @@ namespace HistoryBox
         {
             get
             {
+                EnsureRecovered();
                 HashSet<long> result = new HashSet<long>();
                 foreach (CharacterMetadata character in metadata.Characters) result.Add(character.Id);
                 return result;
@@ -1747,6 +1921,7 @@ namespace HistoryBox
 
             Slot = slot;
             LastYear = HistoryStorage.GetLastYear(directory);
+            if (LastYear >= 0) committedElevation = HistoryStorage.LoadElevation(directory, metadata.Map, LastYear);
 
             if (metadata.World.Id == null)
             {
@@ -1761,11 +1936,17 @@ namespace HistoryBox
         {
         }
 
+        private void EnsureRecovered()
+        {
+            if (!HistoryStorage.Recover(directory)) return;
+            metadata = HistoryStorage.LoadMetadata(directory);
+            LastYear = metadata.World.Year;
+            committedElevation = LastYear < 0 ? null : HistoryStorage.LoadElevation(directory, metadata.Map, LastYear);
+        }
         public void Record(AnnualRecord record)
         {
-            HistoryStorage.Recover(directory);
-            int persistedYear = HistoryStorage.GetLastYear(directory);
-            if (persistedYear > LastYear) { metadata = HistoryStorage.LoadMetadata(directory); LastYear = persistedYear; }
+            EnsureRecovered();
+            long timing = Performance.Begin();
             WorldReader.Validate(record);
             if (record.World.Year <= LastYear)
             {
@@ -1774,9 +1955,20 @@ namespace HistoryBox
 
             MetadataRecord candidate = HistoryStorage.Clone(metadata);
             candidate.Update(record, LastYear);
+            record.Map.Clear();
+            if (committedElevation != null)
+            {
+                if (committedElevation.Length != record.Elevation.Count) throw new InvalidDataException("Previously committed map size changed.");
+                for (int i = 0; i < committedElevation.Length; i++)
+                {
+                    if (committedElevation[i] != record.Elevation[i]) record.Map.Add(new int[] { i, record.Elevation[i] });
+                }
+            }
             candidate.World.Year = record.World.Year;
-            HistoryStorage.Commit(directory, candidate, record);
+            Performance.End("prepare", timing);
+            HistoryStorage.Commit(directory, candidate, record, null, LastYear);
             metadata = candidate;
+            committedElevation = record.Elevation.ToArray();
             LastYear = record.World.Year;
         }
 
@@ -1787,23 +1979,19 @@ namespace HistoryBox
                 return;
             }
 
+            EnsureRecovered();
             string target = HistoryStorage.GetAvailableDirectory(metadata.World.Name, slot);
-
-            if (target != directory)
-            {
-                Directory.Move(directory, target);
-                directory = target;
-            }
-
             MetadataRecord candidate = HistoryStorage.Clone(metadata);
             candidate.World.Slot = slot;
-            HistoryStorage.SaveMetadata(directory, candidate);
+            HistoryStorage.Commit(target, candidate, null, directory);
+            directory = target;
             metadata = candidate;
             Slot = slot;
         }
 
         public HistorySession Duplicate(int slot, int year)
         {
+            EnsureRecovered();
             string target = HistoryStorage.GetAvailableDirectory(metadata.World.Name, slot);
             MetadataRecord copy = HistoryStorage.Clone(metadata);
             copy.World.Slot = slot;
@@ -1818,7 +2006,8 @@ namespace HistoryBox
                 Slot = slot,
                 LastYear = HistoryStorage.GetLastYear(target),
                 directory = target,
-                metadata = copy
+                metadata = copy,
+                committedElevation = HistoryStorage.LoadElevation(target, copy.Map, copy.World.Year)
             };
         }
     }
@@ -2148,6 +2337,7 @@ namespace HistoryBox
                     throw new InvalidDataException("HistoryBox metadata is invalid.");
                 }
                 if (result.Characters == null) result.Characters = new List<CharacterMetadata>();
+                if (result.World.Year >= 0) ValidateMap(result.Map);
 
                 foreach (CharacterMetadata character in result.Characters)
                 {
@@ -2164,7 +2354,7 @@ namespace HistoryBox
                     {
                         string first = reader.ReadLine();
                         AnnualHeader header = string.IsNullOrWhiteSpace(first) ? null : Deserialize<AnnualHeader>(first);
-                        if (header == null || header.Metadata == null || Serialize(header.Metadata) != Serialize(result.World)) throw new InvalidDataException("HistoryBox file metadata mismatch.");
+                        if (!SameIdentity(header, result.World)) throw new InvalidDataException("HistoryBox file metadata mismatch.");
                     }
                     if (GetLastYear(directory) != result.World.Year) throw new InvalidDataException("HistoryBox last-year mismatch.");
                 }
@@ -2172,36 +2362,84 @@ namespace HistoryBox
             }
         }
 
-        public static int GetLastYear(string directory, int maximum = int.MaxValue)
+        public static void ValidateMap(MapMetadata map)
         {
-            string path = AnnualPath(directory);
+            if (map == null || map.Width <= 0 || map.Height <= 0 || map.Elevation == null || (long)map.Width * map.Height != map.Elevation.Count) throw new InvalidDataException("Invalid map baseline or incompatible history format.");
+            foreach (int value in map.Elevation) if (value < 0 || value > 3) throw new InvalidDataException("Invalid baseline terrain category.");
+        }
 
-            if (!File.Exists(path))
+        public static int[] LoadElevation(string directory, MapMetadata map, int maximum)
+        {
+            if (maximum < 0) return null;
+            ValidateMap(map);
+            int[] elevation = map.Elevation.ToArray();
+            bool header = false;
+            int previous = -1;
+            foreach (string line in File.ReadLines(AnnualPath(directory)))
             {
-                return -1;
-            }
-
-            int year = -1, previous = -1;
-            bool headerRead = false;
-
-            foreach (string line in File.ReadLines(path))
-            {
-                if (!string.IsNullOrWhiteSpace(line))
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!header) { header = true; continue; }
+                AnnualRecord observation = Deserialize<AnnualRecord>(line);
+                if (observation.World == null || observation.World.Year <= previous) throw new InvalidDataException("Invalid map-observation sequence.");
+                bool first = previous < 0;
+                if (observation.World.Year > maximum) break;
+                previous = observation.World.Year;
+                if (observation.Map == null) throw new InvalidDataException("Missing annual map changes.");
+                if (first && observation.Map.Count != 0) throw new InvalidDataException("First annual map must match the baseline.");
+                int priorIndex = -1;
+                foreach (int[] change in observation.Map)
                 {
-                    AnnualRecord record = Deserialize<AnnualRecord>(line);
-                    if (!headerRead)
-                    {
-                        AnnualHeader header = Deserialize<AnnualHeader>(line);
-                        if (record.World != null || header.Metadata == null) throw new InvalidDataException("Missing annual metadata header.");
-                        headerRead = true; continue;
-                    }
-                    if (record.World == null) throw new InvalidDataException("Unexpected repeated annual header.");
-                    if (record.World.Year <= previous) throw new InvalidDataException("Annual years are not strictly increasing.");
-                    previous = record.World.Year;
-                    if (previous <= maximum) year = previous;
+                    if (change == null || change.Length != 2 || change[0] <= priorIndex || change[0] >= elevation.Length || change[1] < 0 || change[1] > 3) throw new InvalidDataException("Invalid annual terrain change.");
+                    elevation[change[0]] = change[1];
+                    priorIndex = change[0];
                 }
             }
+            if (!header || previous != maximum) throw new InvalidDataException("Incomplete annual map observations.");
+            return elevation;
+        }
 
+        // Startup reads only the final complete line. Full traversal is reserved
+        // for an explicit historical cutoff used by duplication.
+        private static int GetYearAtLength(string path, long length)
+        {
+            using (FileStream stream = File.OpenRead(path))
+            {
+                if (length <= 0 || length > stream.Length) throw new InvalidDataException("Invalid annual file length.");
+                stream.Position = length - 1;
+                if (stream.ReadByte() != 10) throw new InvalidDataException("Incomplete annual append without a ready journal.");
+                List<byte> reversed = new List<byte>(); byte[] block = new byte[4096]; long position = length; bool started = false, done = false;
+                while (position > 0 && !done)
+                {
+                    int count = (int)Math.Min(block.Length, position); position -= count; stream.Position = position;
+                    int read = 0; while (read < count) { int n = stream.Read(block, read, count - read); if (n == 0) throw new EndOfStreamException(); read += n; }
+                    for (int i = count - 1; i >= 0; i--)
+                    {
+                        byte value = block[i]; if (!started && (value == 10 || value == 13)) continue;
+                        if (value == 10) { done = true; break; } started = true; reversed.Add(value);
+                    }
+                }
+                reversed.Reverse(); string line = new UTF8Encoding(false, true).GetString(reversed.ToArray());
+                YearProbe record = Deserialize<YearProbe>(line);
+                if (record.World != null) return record.World.Year;
+                AnnualHeader header = Deserialize<AnnualHeader>(line);
+                if (header == null || header.Metadata == null) throw new InvalidDataException("Missing annual metadata header.");
+                return -1;
+            }
+        }
+        public static int GetLastYear(string directory, int maximum = int.MaxValue)
+        {
+            string path = AnnualPath(directory); if (!File.Exists(path)) return -1;
+            if (maximum == int.MaxValue) return GetYearAtLength(path, new FileInfo(path).Length);
+            int year = -1; bool header = false;
+            foreach (string line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!header) { if (Deserialize<AnnualHeader>(line).Metadata == null) throw new InvalidDataException("Missing annual metadata header."); header = true; continue; }
+                YearProbe record = Deserialize<YearProbe>(line);
+                if (record.World == null || record.World.Year <= year) throw new InvalidDataException("Invalid annual year order.");
+                if (record.World.Year > maximum) break;
+                year = record.World.Year;
+            }
             return year;
         }
 
@@ -2224,46 +2462,102 @@ namespace HistoryBox
         }
 
         [DataContract]
-        private sealed class AnnualHeader
+        private sealed class StreamIdentity : IExtensibleDataObject
         {
-            [DataMember(Name = "metadata", Order = 1)] public WorldMetadata Metadata;
+            public ExtensionDataObject ExtensionData { get; set; }
+            [DataMember(Name = "id", Order = 1)] public string Id;
+            [DataMember(Name = "slot", Order = 2)] public int? Slot;
         }
-
-        // Stage both files before publication. A durable ready marker allows replay after interruption.
+        [DataContract]
+        private sealed class AnnualHeader : IExtensibleDataObject
+        {
+            public ExtensionDataObject ExtensionData { get; set; }
+            [DataMember(Name = "metadata", Order = 1)] public StreamIdentity Metadata;
+        }
+        [DataContract]
+        private sealed class YearProbe
+        {
+            [DataMember(Name = "world")] public YearValue World { get; set; }
+        }
+        [DataContract]
+        private sealed class YearValue
+        {
+            [DataMember(Name = "year", IsRequired = true)] public int Year { get; set; }
+        }
+        [DataContract]
+        private sealed class CommitJournal
+        {
+            [DataMember] public string Mode;
+            [DataMember] public long PreviousLength;
+            [DataMember] public int PreviousYear;
+            [DataMember] public int Year;
+        }
+        private static AnnualHeader Header(WorldMetadata world)
+        {
+            return new AnnualHeader { Metadata = new StreamIdentity { Id = world.Id, Slot = world.Slot } };
+        }
+        private static bool SameIdentity(AnnualHeader header, WorldMetadata world)
+        {
+            return header != null && header.Metadata != null && header.Metadata.Id == world.Id && header.Metadata.Slot == world.Slot && Serialize(header) == Serialize(Header(world));
+        }
         public static MetadataRecord Clone(MetadataRecord value) { return Deserialize<MetadataRecord>(Serialize(value)); }
 
-        public static void Commit(string directory, MetadataRecord overview, AnnualRecord next, string sourceDirectory = null)
+        // Routine recording journals just one line and the proposed overview. New
+        // streams (initial creation, slot assignment, duplication) alone copy history.
+        public static void Commit(string directory, MetadataRecord overview, AnnualRecord next, string sourceDirectory = null, int? previousYear = null)
         {
+            long timing = Performance.Begin();
             Directory.CreateDirectory(directory);
             Recover(directory);
             string staging = Path.Combine(directory, "commit.pending");
+            ClearStaging(staging);
             Directory.CreateDirectory(staging);
-            string annual = AnnualPath(sourceDirectory ?? directory);
-            using (StreamWriter writer = new StreamWriter(AnnualPath(staging), false, new UTF8Encoding(false)))
+            string annual = AnnualPath(directory);
+            CommitJournal journal = new CommitJournal { Year = overview.World.Year, PreviousLength = File.Exists(annual) ? new FileInfo(annual).Length : 0, PreviousYear = previousYear ?? GetLastYear(directory) };
+            if (sourceDirectory != null || !File.Exists(annual))
             {
-                writer.WriteLine(Serialize(new AnnualHeader { Metadata = overview.World }));
-                if (File.Exists(annual))
+                journal.Mode = "stream";
+                string source = sourceDirectory == null ? null : AnnualPath(sourceDirectory);
+                using (StreamWriter writer = new StreamWriter(AnnualPath(staging), false, new UTF8Encoding(false)))
                 {
-                    foreach (string line in File.ReadLines(annual))
+                    writer.WriteLine(Serialize(Header(overview.World)));
+                    int prior = -1;
+                    if (source != null && File.Exists(source))
                     {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-                        AnnualRecord old = Deserialize<AnnualRecord>(line);
-                        if (old.World != null && old.World.Year <= overview.World.Year) writer.WriteLine(line);
+                        bool first = true;
+                        foreach (string line in File.ReadLines(source))
+                        {
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            if (first) { first = false; continue; }
+                            YearProbe old = Deserialize<YearProbe>(line);
+                            if (old.World == null || old.World.Year <= prior) throw new InvalidDataException("Invalid source history order.");
+                            if (old.World.Year > overview.World.Year) break;
+                            prior = old.World.Year; writer.WriteLine(line);
+                        }
                     }
+                    if (next != null) { if (next.World.Year <= prior) throw new InvalidDataException("Repeated annual observation."); writer.WriteLine(Serialize(next)); }
+                    writer.Flush(); ((FileStream)writer.BaseStream).Flush(true);
                 }
-                if (next != null) writer.WriteLine(Serialize(next));
-                writer.Flush(); ((FileStream)writer.BaseStream).Flush(true);
+                if (GetLastYear(staging) != overview.World.Year) throw new InvalidDataException("New stream and overview years disagree.");
+            }
+            else
+            {
+                using (StreamReader reader = File.OpenText(annual)) if (!SameIdentity(Deserialize<AnnualHeader>(reader.ReadLine()), overview.World)) throw new InvalidDataException("Annual stream identity cannot change.");
+                journal.Mode = next == null ? "metadata" : "append";
+                if (next != null)
+                {
+                    if (next.World.Year != overview.World.Year || next.World.Year <= journal.PreviousYear) throw new InvalidDataException("Invalid next annual year.");
+                    WriteDurable(Path.Combine(staging, "append.jsonl"), Serialize(next) + "\n");
+                }
+                else if (overview.World.Year != journal.PreviousYear) throw new InvalidDataException("Metadata-only commit cannot change year.");
             }
             WriteDurable(MetadataPath(staging), FormatMetadata(Serialize(overview)));
+            WriteDurable(Path.Combine(staging, "journal.json"), Serialize(journal));
             WriteDurable(Path.Combine(staging, "ready"), "ready");
+            Performance.End("stage", timing);
             Recover(directory);
         }
-
-        public static void SaveMetadata(string directory, MetadataRecord record)
-        {
-            Commit(directory, record, null);
-        }
-
+        public static void SaveMetadata(string directory, MetadataRecord record) { Commit(directory, record, null); }
         private static void WriteDurable(string path, string text)
         {
             using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -2272,22 +2566,64 @@ namespace HistoryBox
                 stream.Write(bytes, 0, bytes.Length); stream.Flush(true);
             }
         }
-
-        public static void Recover(string directory)
+        private static void Publish(string source, string target)
         {
-            string staging = Path.Combine(directory, "commit.pending");
-            string ready = Path.Combine(staging, "ready");
-            if (!File.Exists(ready)) return;
-            foreach (string name in new[] { "annual.jsonl", "overview.json" })
+            string temporary = target + ".tmp";
+            File.Copy(source, temporary, true);
+            using (FileStream stream = new FileStream(temporary, FileMode.Open, FileAccess.Write, FileShare.None)) stream.Flush(true);
+            if (File.Exists(target)) File.Replace(temporary, target, null); else File.Move(temporary, target);
+        }
+        private static void ClearStaging(string staging)
+        {
+            if (!Directory.Exists(staging)) return;
+            foreach (string name in new[] { "annual.jsonl", "overview.json", "append.jsonl", "journal.json" })
             {
-                string target = Path.Combine(directory, name), temporary = target + ".tmp";
-                File.Copy(Path.Combine(staging, name), temporary, true);
-                using (FileStream stream = new FileStream(temporary, FileMode.Open, FileAccess.Write, FileShare.None)) stream.Flush(true);
-                if (File.Exists(target)) File.Replace(temporary, target, null);
-                else File.Move(temporary, target);
+                string path = Path.Combine(staging, name); if (File.Exists(path)) File.Delete(path);
             }
-            File.Delete(ready);
-            File.Delete(AnnualPath(staging)); File.Delete(MetadataPath(staging)); Directory.Delete(staging);
+            Directory.Delete(staging); // Never recursively remove an unknown path or file.
+        }
+        public static bool Recover(string directory)
+        {
+            string staging = Path.Combine(directory, "commit.pending"), ready = Path.Combine(staging, "ready");
+            if (!File.Exists(ready)) return false;
+            long timing = Performance.Begin();
+            CommitJournal journal = Deserialize<CommitJournal>(File.ReadAllText(Path.Combine(staging, "journal.json")));
+            MetadataRecord overview = Deserialize<MetadataRecord>(File.ReadAllText(MetadataPath(staging)));
+            if (journal == null || overview.World == null || journal.Year != overview.World.Year) throw new InvalidDataException("Invalid pending history commit.");
+            string annual = AnnualPath(directory);
+            if (journal.Mode == "stream")
+            {
+                if (GetLastYear(staging) != journal.Year) throw new InvalidDataException("Pending stream year mismatch.");
+                using (StreamReader reader = File.OpenText(AnnualPath(staging))) if (!SameIdentity(Deserialize<AnnualHeader>(reader.ReadLine()), overview.World)) throw new InvalidDataException("Pending stream identity mismatch.");
+                Publish(AnnualPath(staging), annual);
+            }
+            else if (journal.Mode == "append" || journal.Mode == "metadata")
+            {
+                using (StreamReader reader = File.OpenText(annual)) if (!SameIdentity(Deserialize<AnnualHeader>(reader.ReadLine()), overview.World)) throw new InvalidDataException("Pending append identity mismatch.");
+                if (journal.PreviousLength <= 0 || GetYearAtLength(annual, journal.PreviousLength) != journal.PreviousYear) throw new InvalidDataException("Pending append base year mismatch.");
+                if (journal.Mode == "append")
+                {
+                    byte[] bytes = File.ReadAllBytes(Path.Combine(staging, "append.jsonl"));
+                    YearProbe next = Deserialize<YearProbe>(Encoding.UTF8.GetString(bytes));
+                    if (bytes.Length == 0 || bytes[bytes.Length - 1] != 10 || next.World == null || next.World.Year != journal.Year || journal.Year <= journal.PreviousYear) throw new InvalidDataException("Invalid pending annual line.");
+                    using (FileStream stream = new FileStream(annual, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        long suffix = stream.Length - journal.PreviousLength;
+                        if (suffix < 0 || suffix > bytes.Length) throw new InvalidDataException("Annual file changed outside pending commit.");
+                        stream.Position = journal.PreviousLength;
+                        for (int i = 0; i < suffix; i++) if (stream.ReadByte() != bytes[i]) throw new InvalidDataException("Pending annual suffix disagrees with journal.");
+                        if (suffix != bytes.Length) { stream.SetLength(journal.PreviousLength); stream.Position = journal.PreviousLength; stream.Write(bytes, 0, bytes.Length); }
+                        stream.Flush(true);
+                    }
+                }
+                else if (new FileInfo(annual).Length != journal.PreviousLength || journal.Year != journal.PreviousYear) throw new InvalidDataException("Invalid metadata-only commit.");
+            }
+            else throw new InvalidDataException("Unknown pending history operation.");
+            Publish(MetadataPath(staging), MetadataPath(directory));
+            File.Delete(ready); // Both files are durable before removing the replay marker.
+            try { ClearStaging(staging); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            Performance.End("publish", timing);
+            return true;
         }
 
         private static string FormatMetadata(string json)

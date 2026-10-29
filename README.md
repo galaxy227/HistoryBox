@@ -1,6 +1,6 @@
 # Welcome to HistoryBox
 
-Record your WorldBox world's history, then explore its people, kingdoms, villages, wars, and alliances in your browser.
+Record your WorldBox world's history, then explore its people, kingdoms, villages, wars, alliances, and changing map in your browser.
 
 ## Install
 
@@ -35,10 +35,11 @@ Open your world's folder inside the location below. Copy **overview.json** and *
 
 ## Explore
 
-Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files from the same recording, and choose **Open world**. Your files stay in your browser.
+Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files from the same recording, and choose **Open world**. Your files stay in your browser. Choose **Map** to watch terrain and territory change with the timeline. Drag to move around, scroll or pinch to zoom, and select territory to open its village or kingdom. The map’s Settings arrow toggles territory names. Entity browser remembers where you left off when you return.
 
 ## Notes
 
+- Use files from the current recorder with the current Viewer. Older recording formats are not converted; keep them separately when beginning a new history.
 - Recording starts when Activator is ON; earlier years cannot be recovered. **Duplicator ON** keeps a separate history when saving into another slot.
 - Downloaded this repository? Open its `index.html` in a modern browser to use the Viewer locally.
 - Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations may use another [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).

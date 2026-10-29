@@ -90,7 +90,7 @@ On Windows, this normally corresponds to:
 Each tracked world has its own directory containing:
 
 - `annual.jsonl` — One metadata header, followed by one JSON object per recorded year.
-- `overview.json` — Persistent information about historical entities and their lifespans.
+- `overview.json` — Persistent information about historical entities, their lifespans, and the initial terrain map.
 
 ### Directory Naming
 
@@ -110,29 +110,45 @@ Unnamed worlds use numbered directories such as `HistoryBox_0`.
 
 ### annual.jsonl
 
-Begins with a single `metadata` header identifying the world, name, slot, and last recorded year. Subsequent lines contain five annual categories:
+Begins with one immutable header, `{ "metadata": { "id": "world-guid", "slot": 1 } }`. An unassigned save uses `null` for slot. Only the world GUID and slot belong in this header; the mutable name and last recorded year belong in overview. Subsequent lines contain six annual categories:
 
-1. `world` — Year and global population by species.
-2. `kingdoms` — Kingdom IDs, owned village IDs (capital first when available), and the current `king_id` (or null).
-3. `villages` — Population, species breakdown, army, loyalty, territory, housing, food, coins, and the current `leader_id` (or null).
-4. `characters` — Current kingdom, village, confirmed office or occupation, level, personal coins, and cumulative kills.
-5. `wars` — Cumulative attacker and defender casualties.
+1. `map` — Sorted sparse terrain changes as `[zoneId, newElevation]` pairs.
+2. `world` — Year and global population by species.
+3. `kingdoms` — Kingdom IDs, owned village IDs (capital first when available), and the current `king_id` (or null).
+4. `villages` — Population, species breakdown, army, loyalty, housing, food, coins, territory zone lists, and the current `leader_id` (or null).
+5. `characters` — Current kingdom, village, confirmed office or occupation, level, personal coins, and cumulative kills.
+6. `wars` — Cumulative attacker and defender casualties.
 
 Each line after the header represents one recorded year.
 
 ### overview.json
 
-Contains seven major categories:
+Contains eight major categories:
 
 1. `metadata` — Persistent world GUID (`id`), name, save slot, and last recorded `year`.
-2. `ages` — Historical world ages and their lifespans.
-3. `kingdoms` — Kingdom identities, founding species (`founding_species`), and observed lifespans.
-4. `villages` — Village identities, founding species (`founding_species`), and observed lifespans.
-5. `characters` — Identities, species, gender, birth/end years, and cumulative parent, sibling, and child relationships (`p`, `s`, `c`).
-6. `wars` — War identities, participants, sides, and involvement intervals.
-7. `alliances` — Alliance identities and kingdom membership intervals.
+2. `map` — Zone-grid `width`, `height`, and the initial `elevation` array.
+3. `ages` — Historical world ages and their lifespans.
+4. `kingdoms` — Kingdom identities, founding species (`founding_species`), and observed lifespans.
+5. `villages` — Village identities, founding species (`founding_species`), and observed lifespans.
+6. `characters` — Identities, species, gender, birth/end years, and cumulative parent, sibling, and child relationships (`p`, `s`, `c`).
+7. `wars` — War identities, participants, sides, and involvement intervals.
+8. `alliances` — Alliance identities and kingdom membership intervals.
 
-Overview information and both metadata headers are updated with every committed observation.
+Overview information is updated with every committed observation. The annual header never changes within a stream; every annual observation retains its own `world.year`.
+
+### Map Recording
+
+The map is recorded at WorldBox zone resolution, normally 8 × 8 tiles per zone. Exported zone IDs are canonical bottom-left row-major positions: `zoneId = y * width + x`. They are independent of the game's zone IDs or enumeration order. Partial edge zones retain their actual tile coverage.
+
+`overview.map.elevation` contains exactly `width * height` integers: 0 Water, 1 Plain, 2 Hill, 3 Mountain. A zone uses its most common tile landform; ties favor the higher category. Terrain assets, rather than numeric tile height, determine classification. Unknown terrain, incomplete grids, duplicate tiles, and inconsistent coordinates abort the observation.
+
+The overview terrain is the immutable baseline at the **first recorded year**, not the latest terrain. The first annual `map` is empty. Later `map` arrays contain only changed zones, sorted by ID, with absolute replacement categories. An empty array means no recorded terrain changes. Replay applies patches in chronological order to a copy of the baseline. Gaps do not establish the time of individual edits between observations.
+
+Each village's `territory` is a complete zone list for that year. Its first element is the current verified bonfire zone, or `-1` when no bonfire can be established within the village's territory. Remaining zone IDs are sorted, unique, and never repeat the first zone. For example, `[5,4,6,9]` owns four zones, `[-1,7,11]` owns two, and `[-1]` owns none. Villages cannot claim the same zone in one observation. A bonfire can move during a village's history; it is not a founding location.
+
+Territory is now measured in **zones**, replacing the old tile-count integer. Do not multiply zone counts by 64 and present that as an exact tile count. Kingdom territory comes from its villages, including capital-first ordering when available; independent villages keep their own territory. No additional capital or dynamic-child field is introduced.
+
+Terrain comparison uses the last successfully committed observation. Failed captures/commits do not advance this state. Resume reconstructs it from the baseline and patches; duplicated histories retain the original baseline and only their retained annual changes. A replay target must be a recorded year, and the first patch must be empty.
 
 ### Historical Dates
 
@@ -146,23 +162,35 @@ Historical events that occur entirely while recording is disabled may not be cap
 
 ### Paired file integrity
 
-The first line of annual.jsonl is `{ "metadata": { "id": "GUID", "name": "World name", "slot": 1, "year": 123 } }`. This object exactly matches overview.json.metadata. It occurs only once, before annual observations; annual world.year fields remain unchanged. Every committed observation updates both copies of metadata.year. Viewer rejects mismatched headers or a final observation with a different year.
+The first line of annual.jsonl is `{ "metadata": { "id": "GUID", "slot": 1 } }`. Its identity must match the `id` and `slot` in overview.json.metadata, which also retains `name` and the last recorded `year`. The last complete annual observation’s `world.year` must equal overview.metadata.year. The Viewer rejects identity, slot, or final-year mismatches. Renaming a world updates overview without rewriting the annual header.
 
-Both files are staged and flushed before publication. A commit.pending directory with a ready marker permits replay after an interrupted publication. An incomplete pair copied during recording is rejected; pause recording before copying files. Pair publication is recoverable, not a filesystem-wide atomic two-file operation. Rewriting the annual stream uses bounded memory but adds disk I/O as histories grow. Slot assignment and duplication update both headers. Old metadata.json folders are preserved; the updated recorder starts a separate new-format history rather than asserting an unverifiable legacy pairing.
+Ordinary recording appends only the new observation. A small `commit.pending` journal stages that line, the proposed overview, the previous annual byte length/year, and the new year. Each staged file is flushed before the ready marker is written. Recovery verifies the old prefix and any appended suffix, completes a matching partial append, and publishes overview. Repeating recovery cannot duplicate the year. A conflicting suffix or unjournaled partial final line is rejected rather than silently discarded. The ready marker is removed only after both files are durable.
+
+The session retains the last durable year. Startup and recovery read the final complete annual line by seeking backward; historical-cutoff queries and terrain reconstruction still traverse the required history. Failed captures or publication never advance the session’s year or terrain baseline before recovery confirms durability.
+
+Initial slot assignment and duplication create a new stream with a new immutable header, copying or trimming observations as appropriate. They do not edit the source stream’s header. Metadata-only updates rewrite overview without rewriting annual observations. Pair publication is recoverable, not a filesystem-wide atomic two-file operation: pause recording before copying both files.
 
 Capture derives kingdom village lists from each active village's owner. Non-civilization or inactive owners are represented as null rather than an unresolved civilization ID. War and alliance memberships exclude inactive civilizations. Missing required measurements, invalid counts, or a changing capture year abort the observation instead of substituting zero. Failed captures are retried; unrecorded gaps retain uncertain transition ranges. A failed commit does not advance in-memory history before the staged pair can be recovered.
 
 These checks cannot reconstruct events that happened between observations, or repair contradictory values already present in older exports. The Viewer retains diagnostics for such records rather than inventing replacements.
 
+### Capture and Storage Performance
+
+Terrain capture uses typed zone/tile access, a cached canonical zone mapping, cached reflection lookups where needed, and a 64-bit tile-position mask per zone. Geometry is checked every capture; the cache is invalidated on world/session changes. Terrain categories are rescanned annually so player edits and simulation changes remain visible. There is no speculative dirty-zone shortcut.
+
+Set `HISTORYBOX_PROFILE=1` in the game process environment to log Stopwatch timings for map capture, entity capture, preparation, staging, and publication. Ordinary annual I/O no longer grows with the existing annual file length, although serializing the new observation and expanding overview still has a cost. Storage remains synchronous and durably flushed; no background thread accesses Unity objects. A synthetic 160-observation, 4,096-zone benchmark reduced the final ten writes from about 442 ms to 29 ms; a separate 65,536-tile capture averaged 3.2 ms versus 57 ms before. These are local harness measurements, not WorldBox frame-time guarantees.
+
 ## Compatibility
 
 HistoryBox uses WorldBox's internal C# APIs, which may change between game versions.
+
+The current format requires the fixed id/slot annual header, map baseline, annual patches, and zone-array territory. Headers containing mutable name/year fields and pre-map histories are not migrated automatically; preserve those files and start a separate current-format history. No terrain or territory is invented from old counts.
 
 The mod is intended to remain platform-independent, but compatibility with Windows, macOS, and Linux should be verified individually. The paired-file recorder has been compiled and exercised with a test harness; its latest changes still require an in-game check against the installed WorldBox version.
 
 ## Names and Lifespans
 
-Later observations replace each entity's catalog name with its latest observed name. All historical references use that one current name; rename events and additional schema fields are not recorded. Annual observations refer to entities by ID, so old annual rows need no name rewrite. The paired world headers likewise retain the current observed world name.
+Later observations replace each entity's catalog name with its latest observed name. All historical references use that one current name; rename events and additional schema fields are not recorded. Annual observations refer to entities by ID, so old annual rows need no name rewrite. The current observed world name is retained in overview metadata only.
 
 Each entity retains one start/end pair. If an ID unexpectedly reappears, its end is cleared while it is present and set again when it disappears. The original start remains unchanged. No missing observations are inferred and no additional lifespan intervals are introduced.
 
@@ -176,7 +204,7 @@ Characters enroll through actual `Kingdom.king` or `City.leader` appointments an
 
 The recorder rejects duplicate or unverified rulers, missing appointed characters, and disagreement between a character and their home village owner before committing either file. Annual `king_id` and `leader_id` support independent Viewer validation. A null appointment means no observed live office holder. Validation failures leave the previous paired files intact. Historical exports made with the former profession/save-ID implementation cannot be reconstructed reliably from those files alone; the Viewer reports and withholds contradictory derived values without changing source records.
 
-The revised recorder compiles against the locally installed WorldBox/Unity assemblies. The harness tests stale save IDs, stale profession flags, actual appointments, missing-capital handling, unchanged output fields, and paired-file failure recovery; an in-game run remains required to validate capture timing on each supported game version.
+The revised recorder compiles against the locally installed WorldBox/Unity assemblies. The harness tests stale save IDs, stale profession flags, actual appointments, missing-capital handling, the authorized map schema, zone validation, terrain replay, resume/duplication, and paired-file failure recovery; an in-game run remains required to validate capture timing on each supported game version.
 
 ## Capital transitions
 

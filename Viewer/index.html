@@ -13,7 +13,7 @@
   <a class="skip" href="#main">Skip to content</a>
   <header class="masthead"><a class="brand" href="https://github.com/galaxy227/HistoryBox" target="_blank" rel="noopener noreferrer"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--logo-light)" d="M2 4h5v5h4V4h5v5h4V4h5v5h5v21H2z"/><path fill="var(--logo-dark)" d="M7 14h4v5H7zm14 0h4v5h-4zm-8 8h6v8h-6z"/></svg>HistoryBox</a><span class="header-spacer"></span><button id="replace" hidden>Load world</button><button id="settings-button" hidden>Settings</button></header>
   <div id="navigation-shell" class="sticky-shell" hidden>
-  <nav id="view-nav" aria-label="Main navigation" hidden><a href="#/overview">World overview</a><a href="#/browser/kingdoms">Entity browser</a><span class="nav-world" id="nav-world"></span></nav>
+  <nav id="view-nav" aria-label="Main navigation" hidden><a href="#/overview">World overview</a><a href="#/browser/kingdoms">Entity browser</a><a href="#/map">Map</a><span class="nav-world" id="nav-world"></span></nav>
   <div id="entity-manager" hidden></div>
   </div>
   <div id="timeline-shell" class="timeline-shell" hidden>
@@ -44,7 +44,7 @@
   <footer><button id="diagnostics-button" hidden>Data notes</button></footer>
   <div id="chart-tooltip" tabindex="0" class="tooltip" role="status" hidden></div>
   <dialog id="settings"><h2>Settings</h2><label><input id="animations" type="checkbox" checked>Animation</label><label class="trend-setting" for="trend-years">Grid card timespan <output id="trend-years-value" for="trend-years">50 years</output></label><input id="trend-years" type="range" min="10" max="100" value="50" step="1"><form method="dialog"><button id="reset-settings" type="button">Reset defaults</button><button>Close</button></form></dialog>
-  <dialog id="diagnostics"><h2>Data notes</h2><div id="diagnostics-content"></div><form method="dialog"><button>Close</button></form></dialog>
+  <dialog id="diagnostics"><h2>Data notes</h2><button id="download-notes" type="button">Download log</button><div id="diagnostics-content"></div><form method="dialog"><button>Close</button></form></dialog>
   <div id="announcement" class="sr-only" aria-live="polite"></div>
 </body>
 </html>

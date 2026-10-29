@@ -2,12 +2,12 @@
 
 HistoryBox Viewer is a standalone browser application for exploring world histories recorded by [Box](../Box/README.md).
 
-The Viewer presents population, resources, civilizations, characters, wars, alliances, relationships, and historical changes. Historical files are processed locally in the browser.
+The Viewer presents population, resources, civilizations, characters, wars, alliances, relationships, historical changes, and recorded maps. Historical files are processed locally in the browser.
 
 ## Requirements
 
-- A modern browser with JavaScript, SVG, the File API, and IndexedDB.
-- `overview.json` and `annual.jsonl` from the same HistoryBox world-history directory.
+- A modern browser with JavaScript, SVG, Canvas 2D, the File API, and IndexedDB.
+- `overview.json` and `annual.jsonl` from the same current-format HistoryBox history, with a fixed id/slot annual header and map records.
 
 WorldBox, Unity, a backend, accounts, and application dependencies are not required. There is no build step.
 
@@ -28,11 +28,13 @@ The browser stores the most recently opened files in IndexedDB and saves viewing
 
 **Load world** opens the file selection screen. **Return to current world** returns to the existing dataset. Successful loading clears the file inputs; a failed replacement leaves the previous world available. Clearing the site's browser storage removes its saved history and preferences.
 
-Entity links use fragments such as `#/kingdom/123`. Opening one in a new tab restores that entity when the corresponding world is available in browser storage. Links do not contain or transfer the historical files. Back and Forward restore page scroll positions within the session.
+Entity links use fragments such as `#/kingdom/123`. Opening one in a new tab restores that entity when the corresponding world is available in browser storage. Links do not contain or transfer the historical files. Back and Forward restore page scroll positions. Switching to World overview or Map and then choosing Entity browser returns to the most recently viewed browser or entity page at its saved scroll position.
 
 ## Navigation and Timeline
 
-The top manager contains World overview, Entity browser, and the world name. Entity-type buttons remain visible while browsing entities; the current entity name appears beside them.
+The top manager contains World overview, Entity browser, Map, and the world name. Entity-type buttons remain visible while browsing entities. Open records appear in an embedded tab row beneath those buttons, showing only the selected entity type.
+
+Each type keeps up to five unique tabs, each occupying one fifth of the row. New records replace the oldest unlocked tab. Hover or focus a tab to lock it; up to four tabs can be locked, and the fifth position cannot be locked. Locked tabs stay on the left and are not automatically replaced. Close buttons dismiss individual tabs; closing the last returns to that type’s browser. Tabs, locks, and viewing preferences survive refresh.
 
 The bottom manager contains the timeline controls:
 
@@ -47,20 +49,32 @@ Outside text fields, dropdowns, dialogs, and controls that handle their own keys
 
 Historical charts use the window; the Ages chronology always shows the complete recorded history. Hover a plot to inspect values, or click and drag to select the nearest recorded year. A translucent cursor line previews selection and a thicker opaque line marks the selected year. Focused plots also support arrow keys, Home, and End.
 
-Chart keys identify series and, where applicable, include visibility checkboxes and a select/deselect-all button. Hovering line or population keys emphasizes their series. Timeline row labels already align with their bars and do not trigger highlighting. Dropdowns show at most ten options with internal scrolling, keyboard navigation, and type-ahead. Tooltips flip near viewport edges and scroll internally when their contents exceed the viewport.
+Chart keys identify series and, where applicable, include visibility checkboxes and a select/deselect-all button. Hovering line or population keys emphasizes their series. Timeline row labels already align with their bars and do not trigger highlighting. Dropdowns show at most ten options with internal scrolling, keyboard navigation, and type-ahead. Chart tooltips put the relevant year alone on their first line. Tooltips flip near viewport edges and scroll internally when their contents exceed the viewport.
 
 ## World Overview
 
 **Snapshot** groups selected-year civilization counts, quantities, and species populations into dynamic cards. When character data is present, Characters counts only enrolled characters with an observation that year; it is not a census.
 
-**Summary** shows endpoint changes within the selected window. Population change lists total population and each species; Entity change lists kingdoms, villages, characters, wars, and alliances. Values compare the first and last available observations in the window: gains are green, losses red, and no change white. Missing endpoint data stays unavailable. The selected window title is plain text; other age links still control the manager.
+**Summary** follows the selected window. Population change compares the first and last available observations for total population and each species: gains are green, losses red, and no change white. Entities recorded counts distinct kingdoms, villages, characters, wars, and alliances observed active within the window; entities already present at its beginning are included. Entities ended counts endings contained within the window, including uncertain endings only when both boundaries fit. Missing population endpoints stay unavailable. The selected window title is plain text; other age links still control the manager.
 
 **Statistics** contains two charts:
 
 1. **Population** — Lines, Stacked, Percentage, and Population pie views. Lines includes Global alongside Human, Elf, Orc, and Dwarf, with independent visibility checkboxes. The global total is excluded from stacked and percentage calculations to avoid double counting.
 2. **Historical observations** — Army, territory, houses, food, coins, ratios, and per-resident measures, followed by world-specific kingdom, village, war, and character counts and casualty totals. Population counts belong exclusively to Population.
 
-Chronology groups Ages, Kingdoms, Villages, Wars, and Alliances. Rankings includes the four non-character entity types. Each ranking chart shows the selected year. Characters are available through the entity browser instead. Every chronology chart has a search field, species filter when relevant, a one-word foreground title, and no appended ledger or sorting controls. Historical milestones appear last. Timelines retain fixed-height scrolling regions.
+Chronology groups Ages, Kingdoms, Villages, Wars, and Alliances. Rankings includes the four non-character entity types. Each ranking chart shows the selected year. Characters are available through the entity browser instead. Every chronology chart has a species filter when relevant, a one-word foreground title, and no search field, appended ledger, or sorting controls. Historical milestones appear last. Timelines retain fixed-height scrolling regions. Their rows omit entities whose intervals do not overlap the selected window; Ages always retains the full historical extent.
+
+## Map
+
+Map is a separate viewport-sized page controlled by the same selected year and playback window. It shows the recorded terrain at zone resolution, with Terrain, Kingdoms, and Villages views. Political views tint territory by founding species and draw white boundaries thicker than the zone grid. Village bonfires use nearly zone-sized markers with a white outline. The legend separates species from terrain keys. Terrain colors and map boundaries are editable in the palette.
+
+Drag to pan and scroll or pinch to zoom. Camera movement is bounded to the map; smaller axes stay centered. The widest view spans 1.5 map widths, and the closest view spans eight zones horizontally (very small maps retain the wider bound). The −/+ buttons sit at the lower right; a focused map supports +, −, and Home to reset the camera within these limits.
+
+The toolbar contains View and a Settings arrow. Settings opens the Names checkbox, available in political views. Names are uppercase, slightly translucent, and placed near each connected territory’s center of mass. Fitting shifts away from holes, scales with territory area, and shrinks text to fit. Curvature follows the territory’s shape, with letter rotations limited to 45°. Labels too small to read are withheld.
+
+Hover information follows the current view: terrain, village, or kingdom. Select a zone to inspect terrain and open its village or kingdom. No population is shown on the map. Selection and terrain update with the timeline while retaining the canvas and camera to prevent flashes. No observation is invented for unrecorded years. The page has no document scrolling; both managers remain accessible.
+
+Terrain starts from the first recorded baseline and applies sparse absolute changes through the selected observation. Bounded checkpoints support forward and backward seeking without changing the baseline. Zone IDs run left to right from the bottom row; the canvas reverses rows for screen display. Territory and bonfire locations come from each year's complete village zone lists. The map represents dominant landforms, not individual tiles, detailed buildings, biome textures, or unrecorded changes between years.
 
 ## Entity Browser
 
@@ -84,7 +98,7 @@ Every entity page follows the same structure:
 6. Family for characters.
 7. Historical milestones.
 
-Population uses the same four views as World overview. Lines includes a white Total and its species series. Historical observations excludes population counts and offers shared quantity/ratio measures followed by type-specific measures. War observations compare Total, Attackers, and Defenders; casualties and participant counts are measures of the same chart. Attackers use off-white and defenders brown. Every identity record includes links to the ages it overlaps.
+Population uses the same four views as World overview. Lines includes a white Total and its species series. Historical observations excludes population counts and offers shared quantity/ratio measures followed by type-specific measures. War observations compare Total, Attackers, and Defenders; casualties and participant counts are measures of the same chart. Attackers use light brown and defenders darker brown. Entity observation keys use their identity color; every global baseline is white. Every identity record includes links to the ages it overlaps.
 
 Historical observations includes a checkbox below the chart for the global average of the same entity type. World and owner-peer baselines are not offered. Alliance averages use active-alliance snapshots. Character counts are available for global, kingdom, village, war, and alliance observations; participant totals count characters associated with the participating kingdoms. Missing character coverage stays unavailable.
 
@@ -93,8 +107,8 @@ Specialized views include:
 - **Kingdoms** — Village ownership, capitals, kings, and Wars and Alliances chronology charts.
 - **Villages** — Village leaders and kingdom allegiance. Repeated ownership uses distinct intervals on the same kingdom row.
 - **Characters** — Role, kingdom, and home-village histories, plus family relationships. Role rows name and link the served village for leaders and kingdom for other roles.
-- **Wars** — Participation intervals, with side-specific measurements in Historical observations.
-- **Alliances** — Membership intervals and lifetime membership statistics.
+- **Wars** — A two-column Participants table in Snapshot lists current attacker and defender kingdoms with species-colored links. Participation intervals follow in Chronology, also colored by kingdom species; side-specific measurement lines in Historical observations retain the attacker/defender palette.
+- **Alliances** — Membership intervals and shared measure highlights.
 
 Highlights retain their exact values and observation-year links. Bounded percentage measures, including army/population and population shares, use proportion rings. Values outside 0–100% remain in a ledger rather than being clipped into a misleading pie. Nonnegative quantity highlights use small bars on a shared within-measure scale. Negative or unavailable values remain textual. Static data never uses dynamic snapshot cards.
 
@@ -112,7 +126,7 @@ Recorded parents, siblings, and children come from cumulative `p`, `s`, and `c` 
 
 Kingdom/village snapshots identify tracked kings/leaders from the corresponding annual role and association, checking appointment IDs when present and withholding contradictory affiliations or office claims. Timelines show observed service periods without joining gaps. Kingdom capitals use the existing first-city convention for character-enabled exports; display sorting never changes that array. The format has no separate indication of an unavailable capital, so a temporary capital vacancy cannot be distinguished from the first village in the list.
 
-Older paired histories without a character collection still load. Missing annual character arrays mean character coverage is unavailable for that observation. Those older rows do not establish capital ordering, so the Viewer does not guess a capital from their first village.
+The map-enabled format is required; old numeric-territory or map-less histories are rejected rather than converted. A compatible history without a character collection can still be read. Missing annual character arrays mean character coverage is unavailable for that observation. Those older rows do not establish capital ordering, so the Viewer does not guess a capital from their first village.
 
 ## Cards, Milestones, and Settings
 
@@ -147,7 +161,7 @@ Entity age requires an exact start and a selected year inside the confidently kn
 - Kingdom totals sum villages whose annual ownership agrees with the kingdom's village list. Contradictions make affected totals unavailable.
 - War and alliance totals aggregate canonical statistics for confidently established participating kingdoms. Wars also expose side-specific aggregates. Uncertain membership or missing member observations prevents complete affected totals; recorded casualty data remains independently usable.
 - Ratios use aggregated numerators and denominators, not sums of member ratios. Denominators must be available and positive. Loyalty is not summed.
-- Global population and species populations come from world observations. Global resource and territory quantities come from village observations.
+- Global population and species populations come from world observations. Global resource and territory quantities come from village observations. Territory counts nonnegative zone IDs in each village’s territory array, excluding the missing-bonfire sentinel. Kingdom, war, and alliance aggregates use those zone counts; no tile count is inferred.
 - Species percentages use all species counts, including hidden series. Population shares use recorded global population.
 - War casualties are cumulative. Decreasing counters are flagged rather than interpreted as negative deaths. World casualty histories retain each war's latest recorded total, including ended wars; these are not assumed final totals.
 - Highlights use the full recorded history when changing windows; measure labels use Peak rather than Lifetime peak. Summary statistics use observations within the selected window, with age uncertainty respected.
@@ -157,20 +171,20 @@ Resources represent holdings, not production or income. Ownership changes do not
 
 ### Validation and Additional Fields
 
-Data notes reports invalid measurements, unresolved references, ownership contradictions, interval problems, and decreasing casualty totals. Warnings are grouped by type with a count, an explanation, and up to three representative examples. Every warning contributes to its group and the overall total; there is no 2,000-warning cutoff. overview.json.metadata must exactly match the single metadata header at the beginning of annual.jsonl. Both identify the world (id), name, slot, and last recorded year. The last observation must match metadata.year; duplicate, out-of-order, repeated-header, or mismatched files are rejected. Legacy unpaired metadata.json histories require a new export from the updated Box.
+Data notes reports invalid measurements, unresolved references, ownership contradictions, interval problems, and decreasing casualty totals. Warnings are grouped by type with a count, an explanation, and up to three representative examples. Every warning contributes to its group and the overall total; there is no 2,000-warning cutoff. **Download log** exports every warning, without truncation, as a plain-text `.txt` file. The single annual metadata header must contain exactly id and slot, matching overview.json.metadata. The world name comes only from overview and is not part of paired-file validation. The last observation’s world.year must match overview.metadata.year; duplicate, out-of-order, repeated-header, or mismatched files are rejected. The map baseline must have valid dimensions and terrain classes. Annual patches must be sorted, unique, in range, and empty in the first observation. Village territory requires the leading bonfire ID or sentinel, sorted remaining IDs, and no duplicated ownership. Invalid map records reject the import with a plain-language explanation. Old headers containing name/year, unpaired metadata.json histories, and pre-map numeric-territory histories require a new recording from the updated Box; no legacy migration is performed.
 
 Original additional fields remain in the data model. New entity types or specialized measures require presentation support; they are not automatically exposed as raw JSON in the interface.
 
 ## Source Layout and Customization
 
 - `parser.js` — Parsing, validation, indexes, historical queries, aggregates, and calculations. Independent of the DOM and selected UI state.
-- `viewer.js` — The shared palette at the top, bounded dropdown menus, navigation, persistence, controls, SVG charts, tables, and interactions. Its palette also initializes the root loading page; the application initializes only when the Viewer shell is present.
+- `viewer.js` — The shared palette at the top, bounded dropdown menus, navigation, persistence, controls, SVG charts, the canvas map, tables, and interactions. Its palette also initializes the root loading page; the application initializes only when the Viewer shell is present.
 - `styles.css` — Layout, responsive behavior, and visual styles using palette variables.
 - `index.html` — The application shell, local scripts/styles, loader, managers, and dialogs.
 
 Edit the grouped `THEME` object at the top of `viewer.js` to change colors. It supplies CSS variables and SVG colors for species, global/non-species data, war sides, gains/losses, surfaces, controls, markers, warnings, and shadows. Eight-digit hex values include transparency. Refresh after editing.
 
-The parser exposes `HistoryBox.parse`, `HistoryBox.prepare`, and dataset queries including `snapshot`, `series`, `warSideSeries`, `stats`, `rankings`, `ownership`, `memberships`, `summary`, `period`, `milestones`, `family`, `observationRuns`, and `rulers`.
+The parser exposes `HistoryBox.parse`, `HistoryBox.prepare`, and dataset queries including `snapshot`, `series`, `warSideSeries`, `stats`, `rankings`, `ownership`, `memberships`, `summary`, `period`, `milestones`, `family`, `observationRuns`, `rulers`, and `terrainAt`.
 
 JSONL ingestion and preparation yield between batches. Cached queries, virtualized milestones, paginated tables, and fixed-height scrolling regions keep large histories navigable. Charts limit dense point markers while retaining full-resolution hover values. Memory usage still grows with the dataset and may exceed browser limits for very large histories.
 
