@@ -3,6 +3,7 @@
   'use strict';
   // EDIT PALETTE HERE: all Viewer colors are defined in this single block.
   const THEME = {
+    'unknown': '#FF00FF',
     // Vibrant colors are reserved for species data.
     'human': '#4c8dcb',
     'elf': '#e0bc49',
@@ -26,6 +27,19 @@
     'terrain-1': '#626158',
     'terrain-2': '#858177',
     'terrain-3': '#b6b2a7',
+    'terrain-4': '#342424',
+    // Vanilla biome ground colors; custom biome assets use unknown above.
+    'biome-0': '#242c34',
+    'biome-1': '#d6b27b', 'biome-2': '#91a568', 'biome-3': '#dc98bf',
+    'biome-4': '#d7cb87', 'biome-5': '#65a846', 'biome-6': '#66546e',
+    'biome-7': '#8bbdc8', 'biome-8': '#62b59b', 'biome-9': '#b59caf',
+    'biome-10': '#b0ba8f', 'biome-11': '#69934a', 'biome-12': '#9b4a40',
+    'biome-13': '#467e43', 'biome-14': '#b9b748', 'biome-15': '#b16a46',
+    'biome-16': '#998298', 'biome-17': '#7a70a6', 'biome-18': '#a4c3cb',
+    'biome-19': '#8c867a', 'biome-20': '#b4a55e', 'biome-21': '#68658f',
+    'biome-22': '#64774d', 'biome-23': '#8e8763', 'biome-24': '#cfbf8b',
+    'biome-25': '#858177', 'biome-26': '#a45465', 'biome-27': '#889549',
+    'biome-28': '#bd803b', 'biome-29': '#83a7ac',
     'map-boundary': '#ffffff',
     'map-grid': '#14171b80',
     'map-label': '#000000',
@@ -169,7 +183,7 @@
   const entityColor = (type,id) => type === 'world' ? THEME['global-data'] : colors[data?.entity(type,id)?.founding_species || data?.entity(type,id)?.species] || THEME['entity-data'];
   const metricColor = metric => colors[metric] || THEME['global-data'];
   const typeLabel = type => type.charAt(0).toUpperCase() + type.slice(1);
-  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliances', army: 'Army', territory: 'Territory', houses: 'Houses', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', houses_per_resident: 'Houses / resident', attacker_deaths: 'Attacker casualties', defender_deaths: 'Defender casualties', total_deaths: 'Casualties', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Membership changes', duration: 'Lifespan', owners: 'Distinct known owners', ownership_changes: 'Observed owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Kingdom', latest_year: 'Last casualty observation' };
+  const labels = { characters:'Characters', tracked_characters:'Characters', species:'Species', gender:'Gender', role:'Role', level:'Level', kills:'Total kills', village_id:'Home village', capital_id:'Capital', birth_year:'Birth year', first_observed:'First observed', alliances_observed:'Alliances', entity_age: 'Age', period_peak_population: 'Peak population', population: 'Population', kingdoms: 'Kingdoms', villages: 'Villages', wars: 'Wars', alliances: 'Alliances', army: 'Army', territory: 'Territory', structures: 'Structures', food: 'Food holdings', coins: 'Coin holdings', loyalty: 'Loyalty', population_share: 'Share of global population', territory_share: 'Share of village territory', army_ratio: 'Army / population', food_per_resident: 'Food / resident', coins_per_resident: 'Coins / resident', structures_per_resident: 'Structures / resident', attacker_deaths: 'Attacker casualties', defender_deaths: 'Defender casualties', total_deaths: 'Casualties', members: 'Members', attackers: 'Attackers', defenders: 'Defenders', historical_members: 'Distinct historical members', intervals: 'Involvement intervals', rejoining: 'Members with repeated intervals', participation_changes: 'Membership changes', lifespan: 'Lifespan', owners: 'Distinct known owners', ownership_changes: 'Owner changes', distinct_wars: 'Distinct wars', distinct_alliances: 'Distinct alliances', distinct_attackers: 'Distinct attackers', distinct_defenders: 'Distinct defenders', name: 'Name', id: 'ID', founding_species: 'Founding species', start_year: 'Start year', end_year: 'End year', war_type: 'War type', instigator: 'Instigator', kingdom_id: 'Kingdom', latest_year: 'Last casualty observation' };
   function label(metric) {
     if (metric === 'wars_observed') return 'Wars';
     if (labels[metric]) return labels[metric];
@@ -180,7 +194,7 @@
   }
   const percent = m => m.endsWith('_share') || m === 'army_ratio';
   const format = (v, metric = '') => H.numeric(v) ? percent(metric) ? `${(v * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
-  const date = (v, qualify = true) => v == null ? '—' : (qualify && H.boundary(v)?.exact === false ? 'Observed ' : '') + String(v);
+  const date = v => v == null ? '—' : String(v);
   // Unavailable values are smaller than every numeric value, in either sort direction.
   const compareValues = H.compare;
   let data = null, year = null, age = null, customWindow = false, windowStart = null, windowEnd = null, renderToken = 0;
@@ -318,7 +332,7 @@
   }
   function link(type, id, text) {
     const entity = data.entity(type, id);
-    return entity ? `<a class="entity-link" data-tip="${esc(`${date(entity.start_year)} → ${date(entity.end_year)}`)}" style="--series:${entityColor(type, id)}" href="#/${singular(type)}/${encodeURIComponent(id)}">${entityIcon(type)}${esc(text ?? entity.name ?? `#${id}`)}</a>` : `<span title="Entity unavailable">${esc(text ?? `Unknown ${singular(type)} #${id}`)}</span>`;
+    return entity ? `<a class="entity-link" data-tip="${esc(`${date(entity.birth_year)} → ${date(entity.end_year)}`)}" style="--series:${entityColor(type, id)}" href="#/${singular(type)}/${encodeURIComponent(id)}">${entityIcon(type)}${esc(text ?? entity.name ?? `#${id}`)}</a>` : `<span title="Entity unavailable">${esc(text ?? `Unknown ${singular(type)} #${id}`)}</span>`;
   }
   function ageName(index) {
     const a = data.ages[index]; if (!a) return 'All ages';
@@ -396,18 +410,18 @@
       const old = hasTrend && year !== null ? data.snapshot(trend.type,trend.id,year-1)?.[m] : previous?.[m];
       const delta = H.numeric(v) && H.numeric(old) ? v - old : null;
       const changeColor = delta > 0 ? THEME.gain : delta < 0 ? THEME.loss : THEME.muted;
-      return `<div class="card" style="--series:${baseColor};--trend-color:${changeColor}"><span class="metric">${esc(label(m))}</span><strong>${format(v, m)}</strong>${hasTrend ? `<small class="value-change">${delta === null ? '—' : `${delta > 0 ? '+' : ''}${format(delta,m)}${old !== 0 ? ` (${(delta / Math.abs(old) * 100).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}%)` : ''}`}</small>` : '<small aria-hidden="true">&nbsp;</small>'}${hasTrend ? ended ? '<div class="trend-space" aria-hidden="true"></div>' : sparkline(trend.type,trend.id,m) : ''}</div>`;
+      return `<div class="card" style="--series:${H.SPECIES.includes(m) ? colors[m] : baseColor};--trend-color:${changeColor}"><span class="metric">${esc(label(m))}</span><strong>${format(v, m)}</strong>${hasTrend ? `<small class="value-change">${delta === null ? '—' : `${delta > 0 ? '+' : ''}${format(delta,m)}${old !== 0 ? ` (${(delta / Math.abs(old) * 100).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}%)` : ''}`}</small>` : '<small aria-hidden="true">&nbsp;</small>'}${hasTrend ? ended ? '<div class="trend-space" aria-hidden="true"></div>' : sparkline(trend.type,trend.id,m) : ''}</div>`;
     }).join('')}</div>`;
   }
   function snapshotCards(snapshot, type, id, previous, previousYear) {
-    const quantities = ['population','army','territory','houses','food','coins'];
+    const quantities = ['population','army','territory','structures','food','coins'];
     const groups = type === 'characters' ? [['Character',['entity_age','level','coins','kills']]] : type === 'world' ? [
       ['Civilizations', ['kingdoms','villages','wars',...(data.hasCharacters ? ['tracked_characters'] : [])]], ['Quantities', quantities], ['Species population', H.SPECIES]
     ] : [
       ['Context', ['entity_age', ...(type === 'kingdoms' ? ['villages','wars','alliances'] : type === 'villages' ? ['loyalty'] : type === 'wars' ? ['members','attackers','defenders'] : ['members'])]],
       ['Quantities', quantities], ['Species population', H.SPECIES],
       ['Proportions', ['population_share','army_ratio', ...(type === 'alliances' ? ['territory_share'] : [])]],
-      ['Per resident', ['food_per_resident','coins_per_resident','houses_per_resident']]
+      ['Per resident', ['food_per_resident','coins_per_resident','structures_per_resident']]
     ];
     return groups.map(([name,metrics]) => cards(snapshot,metrics,previous,previousYear,{type,id},name)).join('');
   }
@@ -429,7 +443,7 @@
     const [lo, hi] = range(), allowed = new Set(scopeYears());
     const width = 1100, height = 330, left = 76, right = 24, top = 24, bottom = 40;
     const cid = 'chart-' + (++chartNumber);
-    const chartKey = location.hash + ':' + (id || series.map(s => s.name).join('|')) + ':' + metric;
+    const chartKey = location.hash + ':' + (id || series.map(s => s.name).join('|'));
     const hidden = legendControls ? legendHidden.get(chartKey) || new Set() : new Set();
     const all = series.map((s, i) => ({ ...s, index: i, color: s.color || colors[s.name.toLowerCase()] || colors[metric] || palette[0], points: s.points.filter(p => p.year >= lo && p.year <= hi && allowed.has(p.year)) }));
     const clipped = all.filter(s => !hidden.has(s.name));
@@ -486,7 +500,7 @@
       const sample = '<svg width="24" height="12" aria-hidden="true"><line x1="0" x2="24" y1="6" y2="6" stroke="' + s.color + '" stroke-width="3" stroke-dasharray="' + dash + '"/></svg>';
       return '<label data-key-chart="' + cid + '" data-key-series="' + s.index + '" tabindex="0">' + (legendControls && all.length > 1 ? '<input type="checkbox" data-legend="' + cid + '" data-series="' + esc(s.name) + '"' + (hidden.has(s.name) ? '' : ' checked') + '>' : '') + sample + (s.type && s.id !== undefined ? link(s.type,s.id,s.name) : references(s.name)) + '</label>';
     }).join('');
-    return '<div class="chart-frame"><svg class="chart" data-chart="' + cid + '" viewBox="0 0 ' + width + ' ' + height + '">' + gaps + grid + marks + selected + axis + '<line class="hover-line" hidden y1="' + top + '" y2="' + (height - bottom) + '"/><rect class="interaction" data-plot="' + cid + '" x="' + left + '" y="' + top + '" width="' + (width - left - right) + '" height="' + (height - top - bottom) + '" tabindex="0" role="slider" aria-label="' + esc(label(metric)) + ': hover to inspect, click or use arrow keys to select a recorded year" aria-valuemin="' + lo + '" aria-valuemax="' + hi + '" aria-valuenow="' + (year ?? lo) + '"/></svg></div><div class="legend">' + (legendControls && all.length > 1 ? '<button data-all-legend="' + cid + '">' + (hidden.size ? 'Select all' : 'Deselect all') + '</button>' : '') + legend + '</div>';
+    return '<div class="chart-frame"><svg class="chart" data-chart="' + cid + '" viewBox="0 0 ' + width + ' ' + height + '">' + gaps + grid + marks + selected + axis + '<line class="hover-line" hidden y1="' + top + '" y2="' + (height - bottom) + '"/><rect class="interaction" data-plot="' + cid + '" x="' + left + '" y="' + top + '" width="' + (width - left - right) + '" height="' + (height - top - bottom) + '" tabindex="0" role="slider" aria-label="' + esc(label(metric)) + ': hover to inspect, click or use arrow keys to select a recorded year" aria-valuemin="' + lo + '" aria-valuemax="' + hi + '" aria-valuenow="' + (year ?? lo) + '"/></svg></div><div class="legend">' + (legendControls && all.length > 1 ? '<button data-all-legend="' + cid + '">' + (all.some(s=>hidden.has(s.name)) ? 'Select all' : 'Deselect all') + '</button>' : '') + legend + '</div>';
   }
   function showChartTooltip(event, plot, targetYear = null) {
     const c = charts.get(plot.dataset.plot);
@@ -550,7 +564,7 @@
 
   function cell(value, field) {
     if (field === 'kingdom_id' || field === 'instigator') return value === null ? '—' : value === undefined ? '—' : link('kingdoms', value);
-    if (field === 'start_year' || field === 'end_year') return esc(date(value));
+    if (field === 'birth_year' || field === 'start_year' || field === 'end_year') return esc(date(value));
     if (field === 'village_id' || field === 'capital_id') return value == null ? '—' : link('villages',value);
     if (field === 'founding_species' || field === 'species') return `<span class="species" style="--series:${colors[value] || THEME['unknown-species']}">${esc(value ?? '—')}</span>`;
     return H.numeric(value) ? format(value, field) : esc(value ?? '—');
@@ -558,7 +572,7 @@
   function sorted(rows, field, direction) {
     return [...rows].sort((a, b) => {
       let av = a.values[field], bv = b.values[field];
-      if (field === 'start_year' || field === 'end_year') { av = H.boundary(av)?.lo ?? null; bv = H.boundary(bv)?.lo ?? null; }
+      if (field === 'birth_year' || field === 'start_year' || field === 'end_year') { av = field === 'birth_year' && Number.isSafeInteger(av) ? av : H.boundary(av)?.lo ?? null; bv = field === 'birth_year' && Number.isSafeInteger(bv) ? bv : H.boundary(bv)?.lo ?? null; }
       return compareValues(av, bv, direction) || H.compare(a.entity.id, b.entity.id);
     });
   }
@@ -572,12 +586,12 @@
 <table${id.endsWith('-year') ? ' class="table-dynamic"' : ''}>
 <thead>
 <tr>${selectable ? '<th><button data-all-compare="' + type + '">' + (selected.length ? 'Deselect all' : 'Select all') + '</button></th>' : ''}${columns.map(c => `<th aria-sort="${state.field === c ? state.direction === 1 ? 'ascending' : 'descending' : 'none'}">
-<button data-sort="${id}" data-field="${c}">${esc(type === 'characters' && c === 'start_year' ? 'Birth year' : label(c))}${state.field === c ? state.direction === 1 ? ' ↑' : ' ↓' : ''}</button>
+<button data-sort="${id}" data-field="${c}">${esc(label(c))}${state.field === c ? state.direction === 1 ? ' ↑' : ' ↓' : ''}</button>
 </th>`).join('')}</tr>
 </thead>
 <tbody>${rows.slice(page * limit, (page + 1) * limit).map(r => `<tr>${selectable ? `<td>
 <input type="checkbox" aria-label="Compare ${esc(r.entity.name)}" data-compare="${esc(r.entity.id)}"${selected.includes(String(r.entity.id)) ? ' checked' : ''}>
-</td>` : ''}${columns.map(c => `<td${H.numeric(r.values[c]) ? ' class="number"' : ''}${H.numeric(r.values[c]) && !['id','kingdom_id','instigator','start_year','end_year','latest_year'].includes(c) ? ' data-number' : ''}>${c === 'name' ? link(type, r.entity.id) : cell(r.values[c], c)}</td>`).join('')}</tr>`).join('') || `<tr>
+</td>` : ''}${columns.map(c => `<td${H.numeric(r.values[c]) ? ' class="number"' : ''}${H.numeric(r.values[c]) && !['id','kingdom_id','instigator','birth_year','start_year','end_year','latest_year'].includes(c) ? ' data-number' : ''}>${c === 'name' ? link(type, r.entity.id) : cell(r.values[c], c)}</td>`).join('')}</tr>`).join('') || `<tr>
 <td colspan="${columns.length + (selectable ? 1 : 0)}" class="empty">No matching entities.</td>
 </tr>`}</tbody>
 </table>
@@ -704,18 +718,14 @@
 </div>${year === null ? '<p class="warning">Selected age has no confident observations. Snapshot values are unavailable.</p>' : ''}${section('Snapshot', snapshotCards(snapshot, 'world', '', previous, previousYear))}${ageContent}${section('Statistics', `<div class="grid">${demographics('world', '', 'world-species')}${observations}</div>`)}${section('Chronology', `<div class="grid">${panel('Ages',timeline(data.ages.map((a,i)=>({name:ageName(i),intervals:[a],id:i})), 'ages'))}${['kingdoms','villages','wars','alliances'].map(t => panel(typeLabel(t),timeline(data.catalog(t).map(e=>({name:e.name || `#${e.id}`,id:e.id,type:t,species:e.founding_species||e.species,intervals:[e]})),`life-${t}`))).join('')}</div>`)}${section('Rankings', `<div class="grid">${['kingdoms','villages','wars','alliances'].map(t=>{const choices=standardMetrics(t),metric=choices.includes(pref(`ranking-${t}`,choices[0]))?pref(`ranking-${t}`,choices[0]):choices[0];return panel(typeLabel(t),`<p class="ranking-year">Year ${year ?? '—'}</p>${rankings(t,metric)}`,selector(`ranking-${t}`,'Measure',choices,metric));}).join('')}</div>`)}${section('Historical milestones', `<div class="panel">${events()}</div>`)}`;
   }
   const populationMetrics = ['population',...H.SPECIES];
-  const commonMetrics = [...populationMetrics, 'army', 'territory', 'houses', 'food', 'coins', 'population_share', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'houses_per_resident'];
+  const commonMetrics = [...populationMetrics, 'army', 'territory', 'structures', 'food', 'coins', 'population_share', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'structures_per_resident'];
   const warMetrics = ['total_deaths','attacker_deaths','defender_deaths','attackers','defenders'];
   const standardMetrics = type => type === 'characters' ? ['level','coins','kills'] : [...commonMetrics, 'tracked_characters', ...(type === 'villages' ? ['loyalty'] : type === 'kingdoms' ? ['villages'] : ['members']), ...(type === 'alliances' ? ['territory_share'] : [])];
   const observationMetrics = type => [...standardMetrics(type).filter(m=>!populationMetrics.includes(m)), ...(type === 'wars' ? ['total_deaths','attackers','defenders'] : [])];
   const worldMetrics = [...commonMetrics.filter(m=>!populationMetrics.includes(m) && m !== 'population_share'),'kingdoms','villages','wars','tracked_characters','total_deaths'];
   const worldSeries = metric => metric.endsWith('_deaths') ? data.casualtySeries(metric) : data.series('world','',metric);
   const metricsFor = type => [...standardMetrics(type), ...(type === 'wars' ? warMetrics : [])];
-  function entityAge(entity) {
-    const start = H.boundary(entity.start_year), end = H.boundary(entity.end_year);
-    if (year === null || !start?.exact || year < start.lo || (end && year >= end.lo)) return null;
-    return year - start.lo;
-  }
+  function entityAge(entity) { return H.age(entity,year); }
   function entityDuration(type,id) {
     const observed=type==='alliances' ? data.years.filter(y=>data.snapshot(type,id,y)) : data.history(type,id).map(p=>p.year), end=H.boundary(data.entity(type,id)?.end_year);
     return observed.length ? [observed[0],Math.min(data.years.at(-1),Math.max(observed.at(-1),end?.hi ?? observed.at(-1)))] : null;
@@ -773,16 +783,16 @@
 <h1>${esc(entity.name ?? '—')}</h1>
 <dl class="definition">
 <div>
-<dt>${type === 'characters' ? 'Born' : 'First observed'}</dt>
-<dd>${esc(date(entity.start_year, false))}</dd>
+<dt>Birth year</dt>
+<dd>${esc(date(entity.birth_year))}</dd>
 </div>
 <div>
-<dt>${!H.boundary(entity.end_year) || H.boundary(entity.end_year)?.exact ? 'Ended' : 'Observed end'}</dt>
-<dd>${esc(date(entity.end_year, false))}</dd>
+<dt>End year</dt>
+<dd>${esc(date(entity.end_year))}</dd>
 </div>
 <div>
 <dt>Lifespan</dt>
-<dd data-number>${H.duration(entity) === null ? '—' : format(H.duration(entity)) + ' years'}</dd>
+<dd data-number>${H.lifespan(entity) === null ? '—' : format(H.lifespan(entity)) + ' years'}</dd>
 </div>${type === 'characters' ? `<div><dt>Species</dt><dd>${cell(entity.species,'species')}</dd></div><div><dt>Gender</dt><dd>${esc(entity.gender ?? '—')}</dd></div>` : ''}${entity.founding_species ? `<div>
 <dt>Founding species</dt>
 <dd>${cell(entity.founding_species, 'founding_species')}</dd>
@@ -796,13 +806,15 @@
 </div>` : ''}</dl><div class="controls"><button data-entity-window="${esc(id)}" data-entity-type="${type}">View duration</button>${durationWindow ? `<span class="muted">${durationWindow.join(' → ')}</span>` : ''}</div><div class="controls">${data.overlappingAges(type, id).map(a => `<span class="pill">${ageLink(data.ages.indexOf(a), ageName(data.ages.indexOf(a)))}</span>`).join('')}</div>
 </div>
 
-</div>${snapshot?.complete === false ? '<p class="warning">Some relationships could not be confirmed. See Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: type === 'characters' && !snapshot ? null : entityAge(entity) }, type, id, previous, previousYear) + (type === 'wars' ? warParticipants(id) : ''))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
+</div>${snapshot?.complete === false ? '<p class="warning">Some relationships could not be confirmed. See Data notes.</p>' : ''}${section('Snapshot', snapshotAssociations(type,id,snapshot) + snapshotCards({ ...snapshot, entity_age: snapshot ? entityAge(entity) : null }, type, id, previous, previousYear) + (type === 'wars' ? warParticipants(id) : ''))}${section('Highlights', historical)}${section('Statistics',`<div class="grid">${secondary}${baseCharts}</div>`)}${section('Chronology',`<div class="grid">${characterSections.chronology}${ownership}${relations}</div>`)}${characterSections.family}${section('Historical milestones', `<div class="panel">${events(type, id)}</div>`)}`;
   }
   function warParticipants(id) {
     const members=data.memberships('wars',id,year).filter(m=>m.status==='active');
-    const sides=['attacker','defender'].map(side=>members.filter(m=>m.side===side));
-    const rows=Array.from({length:Math.max(1,...sides.map(s=>s.length))},(_,i)=>'<tr>'+sides.map(side=>'<td>'+(side[i]?link('kingdoms',side[i].id):'—')+'</td>').join('')+'</tr>').join('');
-    return panel('Participants','<div class="table-wrap war-participants"><table><thead><tr><th>Attackers</th><th>Defenders</th></tr></thead><tbody>'+rows+'</tbody></table></div>');
+    return panel('Participants','<div class="participant-tables">'+['attacker','defender'].map(side=>'<div class="table-wrap war-participants"><table aria-label="'+label(side+'s')+'"><thead><tr><th>'+label(side+'s')+'</th></tr></thead><tbody>'+(members.filter(m=>m.side===side).map(m=>'<tr><td>'+link('kingdoms',m.id)+'</td></tr>').join('')||'<tr><td>—</td></tr>')+'</tbody></table></div>').join('')+'</div>');
+  }
+  function sizeParticipantTables() {
+    const ledger=$('main').querySelector('.highlight-ledger'),tables=$('main').querySelector('.participant-tables');
+    if(ledger && tables)tables.style.setProperty('--highlight-table-height',ledger.getBoundingClientRect().height+'px');
   }
   function snapshotAssociations(type,id,snapshot) {
     if(type==='villages') {
@@ -873,14 +885,14 @@
     return '<nav class="entity-tabs" aria-label="Entity types">' + H.TYPES.map(t => '<a href="#/browser/' + t + '"' + (t === type ? ' aria-current="page"' : '') + '>' + entityIcon(t) + typeLabel(t) + '</a>').join('') + '</nav>';
   }
   function browserColumns(type, mode) {
-    if (type === 'characters') return ['name','id','species','gender','start_year','end_year','duration',...(mode === 'year' ? ['entity_age','role','kingdom_id','village_id','level','coins','kills'] : ['peak_level','peak_coins','peak_kills'])];
-    const identity = ['name', 'id', ...(type === 'kingdoms' || type === 'villages' ? ['founding_species'] : []), 'start_year', 'end_year', 'duration'];
+    if (type === 'characters') return ['name','id','species','gender','birth_year','start_year','end_year','lifespan',...(mode === 'year' ? ['entity_age','role','kingdom_id','village_id','level','coins','kills'] : ['peak_level','peak_coins','peak_kills'])];
+    const identity = ['name', 'id', ...(type === 'kingdoms' || type === 'villages' ? ['founding_species'] : []), 'birth_year', 'start_year', 'end_year', 'lifespan'];
     if (mode === 'year') return [...identity, 'entity_age', ...(type === 'villages' ? ['kingdom_id'] : type === 'wars' ? ['war_type', 'instigator'] : []), ...metricsFor(type), ...(type === 'kingdoms' ? ['wars', 'alliances'] : [])];
     if (type === 'wars') return [...identity, 'war_type', 'instigator', 'latest_attacker_deaths', 'latest_defender_deaths', 'latest_total_deaths', 'latest_year', 'historical_members', 'distinct_attackers', 'distinct_defenders', 'participation_changes'];
-    return [...identity, ...['population', 'army', 'territory', 'houses', 'food', 'coins', ...(type === 'kingdoms' ? ['villages'] : type === 'villages' ? ['loyalty'] : ['members'])].map(m => `peak_${m}`), ...(type === 'kingdoms' ? ['distinct_wars', 'distinct_alliances'] : type === 'villages' ? ['owners', 'ownership_changes'] : ['historical_members', 'intervals', 'rejoining', 'participation_changes'])];
+    return [...identity, ...['population', 'army', 'territory', 'structures', 'food', 'coins', ...(type === 'kingdoms' ? ['villages'] : type === 'villages' ? ['loyalty'] : ['members'])].map(m => `peak_${m}`), ...(type === 'kingdoms' ? ['distinct_wars', 'distinct_alliances'] : type === 'villages' ? ['owners', 'ownership_changes'] : ['historical_members', 'intervals', 'rejoining', 'participation_changes'])];
   }
   function globalComparison(metric) {
-    if (['population', ...H.SPECIES, 'army', 'territory', 'houses', 'food', 'coins', 'kingdoms', 'villages', 'wars', 'tracked_characters', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'houses_per_resident'].includes(metric)) return data.series('world', '', metric);
+    if (['population', ...H.SPECIES, 'army', 'territory', 'structures', 'food', 'coins', 'kingdoms', 'villages', 'wars', 'tracked_characters', 'army_ratio', 'food_per_resident', 'coins_per_resident', 'structures_per_resident'].includes(metric)) return data.series('world', '', metric);
     if (['population_share', 'territory_share'].includes(metric)) return data.series('world', '', metric === 'population_share' ? 'population' : 'territory').map(p => ({ year: p.year, value: H.numeric(p.value) && p.value > 0 ? 1 : null }));
     if (['total_deaths','attacker_deaths','defender_deaths'].includes(metric)) return data.casualtySeries(metric);
     return null;
@@ -893,12 +905,13 @@
     if (!H.TYPES.includes(type)) type = 'kingdoms';
     const s = browserState(type), available = browserColumns(type, s.mode);
     if(!metricsFor(type).includes(s.compareMetric)) s.compareMetric=metricsFor(type)[0];
-    if (!s.columns[s.mode]) s.columns[s.mode] = available.filter(c => ['name', 'founding_species', 'species','gender','role','level','kills','peak_level','peak_kills', 'start_year', 'end_year', 'population', 'army', 'members', 'kingdom_id', 'war_type', 'peak_population', 'peak_army', 'total_deaths', 'latest_total_deaths', 'historical_members'].includes(c));
+    if (s.columns[s.mode]) s.columns[s.mode] = s.columns[s.mode].map(c => c === 'duration' ? 'lifespan' : c).filter(c => available.includes(c));
+    else s.columns[s.mode] = available.filter(c => ['name', 'founding_species', 'species','gender','role','level','kills','peak_level','peak_kills', 'birth_year', 'start_year', 'end_year', 'population', 'army', 'members', 'kingdom_id', 'war_type', 'peak_population', 'peak_army', 'total_deaths', 'latest_total_deaths', 'historical_members'].includes(c));
     if (!available.includes(s.filterMetric)) s.filterMetric = type === 'characters' ? s.mode === 'history' ? 'peak_level' : 'level' : s.mode === 'history' ? type === 'wars' ? 'latest_total_deaths' : 'peak_population' : type === 'wars' ? 'total_deaths' : 'population';
     const rows = data.catalog(type).flatMap(e => {
       const snap = data.snapshot(type, e.id, year);
       if (s.mode === 'year' && !snap) return [];
-      const values = s.mode === 'history' ? data.summary(type, e.id) : { ...e, duration: H.duration(e), ...snap, entity_age: entityAge(e) };
+      const values = s.mode === 'history' ? data.summary(type, e.id) : { ...e, lifespan: H.lifespan(e), ...snap, entity_age: snap ? entityAge(e) : null };
       if (s.species && (e.founding_species || e.species) !== s.species) return [];
       if (s.warType && e.war_type !== s.warType) return [];
       if (type === 'characters') {
@@ -922,8 +935,8 @@
     const filterCount = ['relationship', 'role', 'gender', 'kingdom', 'village', 'warType', 'dateMin', 'dateMax', 'min', 'max'].filter(k => String(s[k] ?? '').trim() !== '').length;
     const filtersOpen = pref('filters', false), columnsOpen = pref('columns', false);
     const controls = '<div class="browser-toolbar">' + bindSelect('mode', '', ['history', 'year'], s.mode, m => m === 'history' ? 'All history' : 'Selected year') + '<div class="search">' + bindInput('search', '', 'search', 'Search ' + type + '…') + '</div>' + (type === 'kingdoms' || type === 'villages' || type === 'characters' ? bindSelect('species', '', ['', ...H.SPECIES], s.species, v => v ? label(v) : 'All species') : '') + '<button data-toggle="filters" aria-expanded="' + filtersOpen + '">Filters' + (filterCount ? ' <span class="filter-count">' + filterCount + '</span>' : '') + '</button><button data-toggle="columns" aria-expanded="' + columnsOpen + '">Columns</button><button data-reset="' + type + '">Reset</button></div>' +
-      '<div class="filter-panel"' + (filtersOpen ? '' : ' hidden') + '><div class="filter-row filter-relationships">' + bindInput('relationship', 'Related name / ID') + (type === 'characters' ? bindSelect('gender','Gender',['','male','female'],s.gender,v=>v||'Any gender')+bindSelect('role','Role',['','king','leader','captain','warrior','citizen'],s.role,v=>v||'Any role')+bindSelect('kingdom','Kingdom',['',...data.catalog('kingdoms').map(e=>String(e.id))],s.kingdom,v=>v?data.entity('kingdoms',v)?.name||v:'Any kingdom')+bindSelect('village','Home village',['',...data.catalog('villages').map(e=>String(e.id))],s.village,v=>v?data.entity('villages',v)?.name||v:'Any village') : '') + (type === 'wars' ? bindSelect('role', 'Role', ['', 'attacker', 'defender', 'instigator'], s.role, v => v || 'Any role') + bindSelect('warType', 'War type', ['', ...new Set(data.catalog(type).map(e => e.war_type))], s.warType, v => v || 'Any type') : '') + '</div><div class="filter-row filter-dates">' + bindInput('dateMin', 'Start from year', 'number') + bindInput('dateMax', 'Ended by year', 'number') + '</div><div class="filter-row filter-quantities">' + bindSelect('filterMetric', 'Measure', available.filter(c => !['name', 'id', 'founding_species', 'start_year', 'end_year', 'war_type', 'instigator', 'kingdom_id'].includes(c)), s.filterMetric) + bindInput('min', 'Minimum', 'number') + bindInput('max', 'Maximum', 'number') + '</div></div>' +
-      '<div class="column-panel"' + (columnsOpen ? '' : ' hidden') + '><div class="columns">' + available.map(c => '<label><input type="checkbox" data-column="' + c + '" data-type="' + type + '"' + (s.columns[s.mode].includes(c) ? ' checked' : '') + (c === 'name' ? ' disabled' : '') + '>' + esc(type === 'characters' && c === 'start_year' ? 'Birth year' : label(c)) + '</label>').join('') + '</div>' + '<button data-all-columns="' + type + '">' + (s.columns[s.mode].length === available.length ? 'Deselect all' : 'Select all') + '</button>' + '</div>';
+      '<div class="filter-panel"' + (filtersOpen ? '' : ' hidden') + '><div class="filter-row filter-relationships">' + bindInput('relationship', 'Related name / ID') + (type === 'characters' ? bindSelect('gender','Gender',['','male','female'],s.gender,v=>v||'Any gender')+bindSelect('role','Role',['','king','leader','captain','warrior','citizen'],s.role,v=>v||'Any role')+bindSelect('kingdom','Kingdom',['',...data.catalog('kingdoms').map(e=>String(e.id))],s.kingdom,v=>v?data.entity('kingdoms',v)?.name||v:'Any kingdom')+bindSelect('village','Home village',['',...data.catalog('villages').map(e=>String(e.id))],s.village,v=>v?data.entity('villages',v)?.name||v:'Any village') : '') + (type === 'wars' ? bindSelect('role', 'Role', ['', 'attacker', 'defender', 'instigator'], s.role, v => v || 'Any role') + bindSelect('warType', 'War type', ['', ...new Set(data.catalog(type).map(e => e.war_type))], s.warType, v => v || 'Any type') : '') + '</div><div class="filter-row filter-dates">' + bindInput('dateMin', 'Start from year', 'number') + bindInput('dateMax', 'Ended by year', 'number') + '</div><div class="filter-row filter-quantities">' + bindSelect('filterMetric', 'Measure', available.filter(c => !['name', 'id', 'founding_species', 'birth_year', 'start_year', 'end_year', 'war_type', 'instigator', 'kingdom_id'].includes(c)), s.filterMetric) + bindInput('min', 'Minimum', 'number') + bindInput('max', 'Maximum', 'number') + '</div></div>' +
+      '<div class="column-panel"' + (columnsOpen ? '' : ' hidden') + '><div class="columns">' + available.map(c => '<label><input type="checkbox" data-column="' + c + '" data-type="' + type + '"' + (s.columns[s.mode].includes(c) ? ' checked' : '') + (c === 'name' ? ' disabled' : '') + '>' + esc(label(c)) + '</label>').join('') + '</div>' + '<button data-all-columns="' + type + '">' + (s.columns[s.mode].length === available.length ? 'Deselect all' : 'Select all') + '</button>' + '</div>';
     s.filteredIds = rows.map(r => String(r.entity.id));
     const globalPoints = type === 'characters' ? null : globalComparison(s.compareMetric);
     const comparisonSeries = s.selected.map((id,index) => ({ type, id, name: data.entity(type, id)?.name || id, color: entityColor(type,id), points: data.series(type, id, s.compareMetric) }));
@@ -938,28 +951,50 @@
     return '<div class="page-head"><div><p class="eyebrow">Entity browser</p><h1>' + typeLabel(type) + '</h1></div></div>' + '<section class="panel">' + controls + '<div class="catalog-count">' + rows.length + ' ' + type + ' · ' + (s.mode === 'history' ? 'All history' : 'Selected year') + '</div>' + table(type, rows, available.filter(c => s.columns[s.mode].includes(c)), 'browser-' + type + '-' + s.mode, { selectable: true, selected: s.selected }) + '</section>' + section('Compare', '<div class="panel">' + compare + '</div>');
   }
   // Map coordinates are bottom-left zone IDs; camera coordinates use screen rows.
-  let mapCamera=null,mapLayer='kingdoms',mapSelection=null,mapFrame=null,mapNames=true,mapSettings=false;
+  let mapCamera=null,mapPhysical='terrain',mapPolitical=true,mapLayer='kingdoms',mapSelection=null,mapFrame=null,mapSettings=false,mapStructures=true,mapLegendVisible=true,mapZoomVisible=true,mapColorKey=null;
   const mapPointers=new Map();let mapGesture=null;
-  const terrainNames=['Water','Plain','Hill','Mountain'];
+  const terrainNames=['Water','Plain','Hill','Mountain','Lava'];
+  const mapColors=new Map();
+  try { for(const [key,value] of Object.entries(JSON.parse(localStorage.getItem('historybox-map-colors'))||{}))if(/^#[0-9a-f]{6}$/i.test(value))mapColors.set(key,value); } catch {}
+  const politicalMap=()=>mapPolitical;
+  const structuresMap=()=>mapStructures||mapPolitical;
+  const biomeMap=()=>mapPhysical==='biome';
+  const biomeKey=i=>'biome:'+data.mapBiomes[i];
+  function biomeLabel(i){return i===0?'—':i<30?label(data.mapBiomes[i]):data.mapBiomes[i].replace(/^asset:/,'');}
+  function mapColor(key){
+    if(H.SPECIES.includes(key))return THEME[key];
+    if(mapColors.has(key))return mapColors.get(key);
+    if(key.startsWith('biome:')){const i=key==='biome:null'?0:data.mapBiomes.indexOf(key.slice(6));return THEME[i>=0&&i<30?'biome-'+i:'unknown'];}
+    return THEME[key]||THEME.unknown;
+  }
+  function mapEntityColor(type,id){return mapColor(data.entity(type,id)?.founding_species||data.entity(type,id)?.species||'entity-data');}
   function mapLegend() {
-    return (mapLayer!=='terrain'?'<div>'+H.SPECIES.map(s=>'<span><i style="background:var(--'+s+')"></i>'+label(s)+'</span>').join('')+'</div>':'')+'<div>'+terrainNames.map((n,i)=>'<span><i style="background:var(--terrain-'+i+')"></i>'+n+'</span>').join('')+'</div>';
+    const zones=mapObservation().zones,groups=[];
+    if(mapStructures)groups.push(['Structures',[['entity-data','Generic'],['panel2','Ruins']]]);
+    if(mapPolitical||mapStructures)groups.push(['Species',H.SPECIES.map(k=>[k,label(k)])]);
+    if(biomeMap()) {
+      const present=new Set();if(zones)for(let i=1;i<zones.length;i+=3)if(zones[i])present.add(zones[i]);
+      groups.push(['Biome',[...present].sort((a,b)=>a-b).map(i=>[biomeKey(i),biomeLabel(i)])]);
+    }
+    groups.push(['Terrain',terrainNames.map((n,i)=>['terrain-'+i,n])]);
+    return (mapColorKey?'<label class="map-color-editor">Hex color<input id="map-color" aria-label="Map legend hex color" maxlength="7" spellcheck="false" value="'+esc(mapColor(mapColorKey))+'" pattern="#[0-9a-fA-F]{6}"></label>':'')+groups.map(([title,keys])=>'<section><h3>'+title+'</h3><div>'+keys.map(([k,n])=>'<span>'+(H.SPECIES.includes(k)?'<i class="map-species-swatch" style="background:'+mapColor(k)+'"></i>':'<button class="map-swatch" data-map-color="'+esc(k)+'" style="background:'+mapColor(k)+'" aria-label="Edit '+esc(n)+' color" aria-pressed="'+(mapColorKey===k)+'"></button>')+esc(n)+'</span>').join('')+'</div></section>').join('');
   }
   function mapPage() {
-    return '<section class="map-page"><div class="map-toolbar"><h1>Map</h1><label>View<select id="map-layer">'+['terrain','kingdoms','villages'].map(v=>'<option value="'+v+'"'+(v===mapLayer?' selected':'')+'>'+typeLabel(v)+'</option>').join('')+'</select></label><button data-map-settings aria-label="Map settings" aria-controls="map-settings" aria-expanded="'+mapSettings+'"><svg viewBox="0 0 20 14" aria-hidden="true"><path d="M2 2 L10 11 L18 2"/></svg></button></div><div class="map-stage"><canvas id="world-map" tabindex="0" aria-label="World map. Drag to pan, scroll or pinch to zoom. Click territory to inspect its village and kingdom."></canvas><div id="map-settings" class="map-settings"'+(mapSettings?'':' hidden')+'><label id="map-names-control"'+(mapLayer==='terrain'?' hidden':'')+'>Names<input id="map-names" type="checkbox"'+(mapNames?' checked':'')+'></label></div><div class="map-zoom"><button data-map-zoom="0.6666667" aria-label="Zoom out">−</button><button data-map-zoom="1.5" aria-label="Zoom in">+</button></div><div id="map-selection" class="map-selection" hidden></div><p id="map-empty" hidden>No observation for this year</p><div class="map-legend">'+mapLegend()+'</div></div></section>';
+    return '<section class="map-page"><div class="map-toolbar"><h1>Map</h1><label>Physical<select id="map-physical">'+['terrain','biome'].map(v=>'<option value="'+v+'"'+(v===mapPhysical?' selected':'')+'>'+typeLabel(v)+'</option>').join('')+'</select></label><label>Political<select id="map-layer">'+['villages','kingdoms'].map(v=>'<option value="'+v+'"'+(v===mapLayer?' selected':'')+'>'+typeLabel(v)+'</option>').join('')+'</select></label><button data-map-settings aria-label="Map settings" aria-controls="map-settings" aria-expanded="'+mapSettings+'"><svg viewBox="0 0 20 14" aria-hidden="true"><path d="M2 2 L10 11 L18 2"/></svg></button></div><div class="map-stage"><canvas id="world-map" tabindex="0" aria-label="World map. Drag to pan, scroll or pinch to zoom. Click territory to inspect its village and kingdom."></canvas><div id="map-settings" class="map-settings"'+(mapSettings?'':' hidden')+'><label>Political<input id="map-political" type="checkbox"'+(mapPolitical?' checked':'')+'></label><label id="map-structures-control">Structures<input id="map-structures" type="checkbox"'+(mapStructures?' checked':'')+'></label><label>Legend<input id="map-legend-toggle" type="checkbox"'+(mapLegendVisible?' checked':'')+'></label><label>Zoom<input id="map-zoom-toggle" type="checkbox"'+(mapZoomVisible?' checked':'')+'></label></div><div class="map-tools"'+(mapLegendVisible?'':' hidden')+'><div class="map-legend">'+mapLegend()+'</div></div><div class="map-zoom"'+(mapZoomVisible?'':' hidden')+'><button data-map-zoom="0.6666667" aria-label="Zoom out">−</button><button data-map-zoom="1.5" aria-label="Zoom in">+</button></div><div id="map-selection" class="map-selection" hidden></div><p id="map-empty" hidden>No observation for this year</p></div></section>';
   }
-  function mapZoomBounds(width,base) {
-    const min=width/(1.5*data.mapWidth)/base;
+  function mapZoomBounds(width,base,height) {
+    const min=Math.min(width/data.mapWidth,height/data.mapHeight)/1.5/base;
     return [min,Math.max(min,width/8/base)];
   }
   function mapTransform() {
     const c=$('world-map');if(!c)return null;
     const box=c.getBoundingClientRect(),base=Math.min(box.width/data.mapWidth,box.height/data.mapHeight)*.94;
     if(!mapCamera)mapCamera={x:data.mapWidth/2,y:data.mapHeight/2,zoom:1};
-    const [minZoom,maxZoom]=mapZoomBounds(box.width,base);
+    const [minZoom,maxZoom]=mapZoomBounds(box.width,base,box.height);
     mapCamera.zoom=Math.max(minZoom,Math.min(maxZoom,mapCamera.zoom));
     const scale=base*mapCamera.zoom;
-    const clamp=(v,size,viewport)=>size*scale<=viewport?size/2:Math.max(viewport/(2*scale),Math.min(size-viewport/(2*scale),v));
-    mapCamera.x=clamp(mapCamera.x,data.mapWidth,box.width);mapCamera.y=clamp(mapCamera.y,data.mapHeight,box.height);
+    const clamp=(v,size)=>Math.max(.5,Math.min(size-.5,v));
+    mapCamera.x=clamp(mapCamera.x,data.mapWidth);mapCamera.y=clamp(mapCamera.y,data.mapHeight);
     return {box,base,scale,x:box.width/2-mapCamera.x*scale,y:box.height/2-mapCamera.y*scale};
   }
   function mapZone(event) {
@@ -971,23 +1006,30 @@
     if(mapFrame?.data===data && mapFrame.year===year)return mapFrame;
     const record=data.records.get(year),owners=new Map();
     for(const v of record?.raw.villages || [])for(const z of v.territory)if(z>=0)owners.set(z,v);
-    return mapFrame={data,year,record,owners,terrain:data.terrainAt(year),labels:new Map()};
+    return mapFrame={data,year,record,owners,capitals:new Map((record?.raw.kingdoms||[]).filter(k=>k.cities?.length).map(k=>[String(k.cities[0]),k.id])),zones:data.zonesAt(year),labels:new Map()};
   }
   function mapDetails(zone) {
     const frame=mapObservation();if(zone==null||!frame.record)return null;
     const village=frame.owners.get(zone);
-    return {village,kingdom:village?.kingdom_id,terrain:frame.terrain[zone]};
+    return {village,kingdom:village?.kingdom_id,bonfire:village?.territory[0]===zone,capital:village?.kingdom_id!=null&&String(frame.capitals.get(String(village.id)))===String(village.kingdom_id),terrain:frame.zones[zone*3],biome:frame.zones[zone*3+1],structure:frame.zones[zone*3+2]};
+  }
+  function mapStructureLabel(info) {
+    return info.bonfire?(info.capital?'Capital':'Village'):info.structure===0?null:info.structure===6?'Ruined Structure':info.structure===5?'Generic Structure':label(H.SPECIES[info.structure-1])+' Structure';
   }
   function mapTip(event) {
     const info=mapDetails(mapZone(event));if(!info){$('chart-tooltip').hidden=true;return;}
-    const name=mapLayer==='villages'?data.entity('villages',info.village?.id)?.name:mapLayer==='kingdoms'?data.entity('kingdoms',info.kingdom)?.name:null;
-    simpleTooltip(event,'Year '+year+'\n'+(name || terrainNames[info.terrain]));
+    const details=[terrainNames[info.terrain],info.biome?biomeLabel(info.biome):null,mapStructureLabel(info),data.entity('villages',info.village?.id)?.name,data.entity('kingdoms',info.kingdom)?.name];
+    simpleTooltip(event,details.filter(value=>value!=null&&value!=='—'&&value!=='').join('\n'));
   }
   function updateMapSelection() {
     const panel=$('map-selection');if(!panel)return;
     const info=mapDetails(mapSelection);panel.hidden=!info;
     if(!info)return;
-    panel.innerHTML='<button class="map-dismiss" data-map-dismiss aria-label="Close map selection">×</button><div class="map-selection-content"><strong>'+terrainNames[info.terrain]+'</strong>'+(info.village?'<div>'+link('villages',info.village.id)+'</div>'+(info.kingdom!=null?'<div>'+link('kingdoms',info.kingdom)+'</div>':''):'')+'</div>';
+    const structure=mapStructureLabel(info)||'—';
+    const rows=[['terrain',esc(terrainNames[info.terrain])],['biome',esc(biomeLabel(info.biome))],['structure',esc(structure)],['village',info.village?link('villages',info.village.id):'—'],['kingdom',info.kingdom!=null?link('kingdoms',info.kingdom):'—']];
+    const content='<div class="map-selection-header"><div class="map-detail" data-map-detail="zone"><strong>Zone '+mapSelection+'</strong></div><button class="map-dismiss" data-map-dismiss aria-label="Close map selection">×</button></div><div class="map-selection-content">'+rows.map(([kind,value])=>'<div class="map-detail" data-map-detail="'+kind+'">'+value+'</div>').join('')+'</div>';
+    if(panel.innerHTML!==content)panel.innerHTML=content;
+
   }
   // Geometry and fitted glyphs use zone coordinates, independent of zoom. Each
   // connected component has its own centroid so islands never receive ocean labels.
@@ -1001,7 +1043,22 @@
       const cx=points.reduce((n,p)=>n+p.x,0)/points.length,cy=points.reduce((n,p)=>n+p.y,0)/points.length;
       const columns=new Map();for(const p of points){const x=Math.floor(p.x);if(!columns.has(x))columns.set(x,[]);columns.get(x).push(p.y);}
       for(const ys of columns.values())ys.sort((a,b)=>a-b);
-      const candidates=[{x:cx,y:cy},...points.sort((a,b)=>(a.x-cx)**2+(a.y-cy)**2-(b.x-cx)**2-(b.y-cy)**2).slice(0,128)];
+      // Erode one zone around the coast to separate broad lobes joined by
+      // narrow corridors. Fit in the largest interior, not on the bridge
+      // where the combined centroid can fall. Keep thin territories usable.
+      const owned=new Set(zones),core=new Set(zones.filter(z=>{
+        const x=z%data.mapWidth;
+        return x>0&&x<data.mapWidth-1&&[-1,0,1].every(dy=>[-1,0,1].every(dx=>owned.has(z+dy*data.mapWidth+dx)));
+      })),clumps=[];
+      while(core.size){
+        const seed=core.values().next().value,clump=[seed];core.delete(seed);
+        for(let i=0;i<clump.length;i++)for(const next of [clump[i]-1,clump[i]+1,clump[i]-data.mapWidth,clump[i]+data.mapWidth])if(core.delete(next))clump.push(next);
+        clumps.push(clump);
+      }
+      clumps.sort((a,b)=>b.length-a.length);
+      const interior=clumps.length>1?clumps[0].map(z=>({x:z%data.mapWidth+.5,y:data.mapHeight-.5-Math.floor(z/data.mapWidth)})):points;
+      const anchor=clumps.length>1?{x:interior.reduce((n,p)=>n+p.x,0)/interior.length,y:interior.reduce((n,p)=>n+p.y,0)/interior.length}:{x:cx,y:cy};
+      const candidates=[anchor,...interior.sort((a,b)=>(a.x-anchor.x)**2+(a.y-anchor.y)**2-(b.x-anchor.x)**2-(b.y-anchor.y)**2).slice(0,128)];
       const v=frame.owners.get(first),type=mapLayer==='kingdoms'&&v.kingdom_id!=null?'kingdoms':'villages',id=type==='kingdoms'?v.kingdom_id:v.id;
       areas.push({zones:new Set(zones),columns,candidates,name:(data.entity(type,id)?.name || '').toLocaleUpperCase(),layout:undefined});
     }
@@ -1021,18 +1078,37 @@
     const chars=Array.from(area.name);ctx.font='bold 100px "Trebuchet MS", sans-serif';
     const units=chars.map(c=>ctx.measureText(c).width/100);
     const initial=Math.min(2.2,Math.max(.3,Math.sqrt(area.zones.size)*.22));
+    // Allow a modest size reduction for a more central position, never the
+    // drastic shrink needed to squeeze a name onto a narrow connecting bridge.
+    let best=null,bestIndex=Infinity,largest=0;
     for(let size=initial;size>=.12;size*=.88){
-      const widths=units.map(w=>w*size),total=widths.reduce((a,b)=>a+b,0);
-      for(const center of area.candidates){
+      if(best&&size<largest*.8)return best;
+      for(let index=0;index<area.candidates.length;index++){
+        if(index>=bestIndex)break;
+        const center=area.candidates[index];
         if(!inside(center.x,center.y))continue;
+        const widths=units.map(w=>w*size),tracking=size*.06,total=widths.reduce((a,b)=>a+b,0)+tracking*(chars.length-1);
         const span=Math.max(1,(hi-lo)/2),middle=stripCenter(center.x,center.y),left=stripCenter(Math.max(lo,center.x-span),center.y),right=stripCenter(Math.min(hi,center.x+span),center.y);
-        const slope=Math.max(-.7,Math.min(.7,(right-left)/(2*span)));
-        const curve=Math.max(-.7/span,Math.min(.7/span,(left+right-2*middle)/(2*span*span)));
-        let offset=-total/2;const letters=[];
-        for(let i=0;i<chars.length;i++){
-          const dx=offset+widths[i]/2,angle=Math.max(-Math.PI/4,Math.min(Math.PI/4,Math.atan(slope+2*curve*dx)));
-          letters.push({char:chars[i],x:center.x+dx,y:center.y+slope*dx+curve*dx*dx,angle,width:widths[i]});offset+=widths[i];
+        let slope=(right-left)/(2*span),curve=(left+right-2*middle)/(2*span*span);
+        // Space glyphs by distance along the curve, not by horizontal projection.
+        // Limit the curve itself so glyph angles and baseline always agree.
+        const limit=Math.tan(Math.PI/6),steepest=Math.max(Math.abs(slope-curve*total),Math.abs(slope+curve*total));
+        if(steepest>limit){slope*=limit/steepest;curve*=limit/steepest;}
+        const path=[];let length=0;
+        for(let j=0;j<=128;j++){
+          const x=-total/2+total*j/128,y=slope*x+curve*x*x,prior=path.at(-1);
+          if(prior)length+=Math.hypot(x-prior.x,y-prior.y);path.push({x,y,length});
         }
+        let offset=(length-total)/2,cursor=1;const letters=[];
+        for(let i=0;i<chars.length;i++){
+          const distance=offset+widths[i]/2;
+          while(cursor<path.length-1&&path[cursor].length<distance)cursor++;
+          const a=path[cursor-1],b=path[cursor],fraction=(distance-a.length)/(b.length-a.length||1),dx=a.x+(b.x-a.x)*fraction;
+          letters.push({char:chars[i],x:center.x+dx,y:center.y+slope*dx+curve*dx*dx,angle:Math.atan(slope+2*curve*dx),width:widths[i],distance});offset+=widths[i]+tracking;
+        }
+        const mass=letters.reduce((n,g)=>n+g.width,0);
+        const shiftX=letters.reduce((n,g)=>n+(g.x-center.x)*g.width,0)/mass,shiftY=letters.reduce((n,g)=>n+(g.y-center.y)*g.width,0)/mass;
+        for(const g of letters){g.x-=shiftX;g.y-=shiftY;}
         // Sample whole rotated bounding boxes, not only corners: holes and
         // concave coastlines must not cut through the middle of a letter.
         const fits=letters.every(g=>{
@@ -1042,59 +1118,103 @@
             if(!inside(g.x+dx*Math.cos(g.angle)-dy*Math.sin(g.angle),g.y+dx*Math.sin(g.angle)+dy*Math.cos(g.angle)))return false;
           }return true;
         });
-        if(fits)return {size,letters};
+        if(fits){
+          if(!largest)largest=size;
+          best={size,letters};bestIndex=index;
+          if(index===0)return best;
+          break;
+        }
       }
     }
-    return null;
+    return best;
   }
-  function drawMapNames(ctx,t,frame,ownerKey) {
+  const mapNameFade={value:1,from:1,target:1,start:0};
+  let mapFadeFrame=0;
+  function mapNameOpacity(t) {
+    const now=performance.now(),fade=mapNameFade,elapsed=Math.min(1,(now-fade.start)/220);
+    fade.value=fade.from+(fade.target-fade.from)*elapsed*elapsed*(3-2*elapsed);
+    const [minimum,maximum]=mapZoomBounds(t.box.width,t.base,t.box.height);
+    const zoomedOut=maximum>minimum?(maximum-mapCamera.zoom)/(maximum-minimum):1;
+    const target=mapPolitical&&zoomedOut>=.1?1:0;
+    if(target!==fade.target){fade.from=fade.value;fade.target=target;fade.start=now;}
+    if(!animations)fade.value=fade.target;
+    if(Math.abs(fade.value-fade.target)>.001&&!mapFadeFrame)mapFadeFrame=requestAnimationFrame(()=>{mapFadeFrame=0;drawMap();});
+    return fade.value;
+  }
+  function drawMapNames(ctx,t,frame,ownerKey,opacity) {
     for(const area of mapLabelAreas(frame,ownerKey)) {
       if(!area.name)continue;
       if(area.layout===undefined)area.layout=fitMapLabel(ctx,area);
       const layout=area.layout;if(!layout||layout.size*t.scale<7)continue;
       ctx.save();ctx.beginPath();for(const z of area.zones)ctx.rect(t.x+(z%data.mapWidth)*t.scale,t.y+(data.mapHeight-1-Math.floor(z/data.mapWidth))*t.scale,t.scale,t.scale);ctx.clip();
-      ctx.fillStyle=THEME['map-label'];ctx.globalAlpha=.78;ctx.font='bold '+layout.size*t.scale+'px "Trebuchet MS", sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle=THEME['map-label'];ctx.globalAlpha=.78*opacity;ctx.font='bold '+layout.size*t.scale+'px "Trebuchet MS", sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
       for(const g of layout.letters){ctx.save();ctx.translate(t.x+g.x*t.scale,t.y+g.y*t.scale);ctx.rotate(g.angle);ctx.fillText(g.char,0,0);ctx.restore();}ctx.restore();
     }
   }
   function drawMap() {
     const c=$('world-map');if(!c||$('main').hidden)return;
     const main=$('main'),bottom=$('timeline-shell').getBoundingClientRect().top;
-    main.style.height=Math.max(100,bottom-main.getBoundingClientRect().top-8)+'px';
+    const notes=$('diagnostics-button'),reserve=notes && !notes.hidden ? notes.getBoundingClientRect().height+16 : 8;
+    main.style.height=Math.max(40,bottom-main.getBoundingClientRect().top-reserve)+'px';
     const t=mapTransform(),dpr=Math.min(devicePixelRatio||1,2),w=Math.round(t.box.width*dpr),h=Math.round(t.box.height*dpr);
+    const legend=document.querySelector('.map-legend');if(legend)legend.style.maxHeight=Math.max(0,t.box.height-20-(mapZoomVisible?(document.querySelector('.map-zoom')?.getBoundingClientRect().height||40)+10:0))+'px';
     if(c.width!==w)c.width=w;if(c.height!==h)c.height=h;
     const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,t.box.width,t.box.height);
-    const frame=mapObservation(),{terrain,owners,record}=frame;$('map-empty').hidden=!!terrain;
-    if(!terrain){updateMapSelection();return;}
+    const frame=mapObservation(),{zones,owners,record}=frame;$('map-empty').hidden=!!zones;
+    if(!zones){updateMapSelection();return;}
     const x0=Math.max(0,Math.floor(-t.x/t.scale)),x1=Math.min(data.mapWidth,Math.ceil((t.box.width-t.x)/t.scale));
     const r0=Math.max(0,Math.floor(-t.y/t.scale)),r1=Math.min(data.mapHeight,Math.ceil((t.box.height-t.y)/t.scale));
     const ownerKey=z=>{const v=owners.get(z);return v?(mapLayer==='kingdoms'&&v.kingdom_id!=null?'k'+v.kingdom_id:'v'+v.id):null;};
     for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++) {
       const z=(data.mapHeight-1-row)*data.mapWidth+x,px=t.x+x*t.scale,py=t.y+row*t.scale,v=owners.get(z);
-      ctx.fillStyle=THEME['terrain-'+terrain[z]];ctx.fillRect(px,py,t.scale+.3,t.scale+.3);
-      if(v&&mapLayer!=='terrain'){ctx.globalAlpha=.65;ctx.fillStyle=entityColor(mapLayer==='kingdoms'&&v.kingdom_id!=null?'kingdoms':'villages',mapLayer==='kingdoms'&&v.kingdom_id!=null?v.kingdom_id:v.id);ctx.fillRect(px,py,t.scale+.3,t.scale+.3);ctx.globalAlpha=1;}
+      ctx.fillStyle=mapColor(biomeMap()&&zones[z*3+1]!==0?biomeKey(zones[z*3+1]):'terrain-'+zones[z*3]);ctx.fillRect(px,py,t.scale+.3,t.scale+.3);
+      if(v&&mapPolitical){ctx.globalAlpha=.65;ctx.fillStyle=mapEntityColor(mapLayer==='kingdoms'&&v.kingdom_id!=null?'kingdoms':'villages',mapLayer==='kingdoms'&&v.kingdom_id!=null?v.kingdom_id:v.id);ctx.fillRect(px,py,t.scale+.3,t.scale+.3);ctx.globalAlpha=1;}
     }
     // Suppress subpixel grids when fitted very far out; never draw dense moire.
-    if(t.scale>=5){ctx.strokeStyle=THEME['map-grid'];ctx.lineWidth=1.25;ctx.beginPath();for(let x=x0;x<=x1;x++){ctx.moveTo(t.x+x*t.scale,t.y+r0*t.scale);ctx.lineTo(t.x+x*t.scale,t.y+r1*t.scale);}for(let row=r0;row<=r1;row++){ctx.moveTo(t.x+x0*t.scale,t.y+row*t.scale);ctx.lineTo(t.x+x1*t.scale,t.y+row*t.scale);}ctx.stroke();}
-    if(mapLayer!=='terrain') {
-      ctx.strokeStyle=THEME['map-boundary'];ctx.lineWidth=2.25;ctx.beginPath();
-      for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++){const z=(data.mapHeight-1-row)*data.mapWidth+x,px=t.x+x*t.scale,py=t.y+row*t.scale;if(!owners.has(z))continue;
+    const gridStroke=1.25;
+    if(t.scale>=5){ctx.strokeStyle=THEME['map-grid'];ctx.lineWidth=gridStroke;ctx.beginPath();for(let x=x0;x<=x1;x++){ctx.moveTo(t.x+x*t.scale,t.y+r0*t.scale);ctx.lineTo(t.x+x*t.scale,t.y+r1*t.scale);}for(let row=r0;row<=r1;row++){ctx.moveTo(t.x+x0*t.scale,t.y+row*t.scale);ctx.lineTo(t.x+x1*t.scale,t.y+row*t.scale);}ctx.stroke();}
+    if(mapSelection!=null){ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=gridStroke*4;ctx.strokeRect(t.x+(mapSelection%data.mapWidth)*t.scale,t.y+(data.mapHeight-1-Math.floor(mapSelection/data.mapWidth))*t.scale,t.scale,t.scale);}
+    if(politicalMap()) {
+      ctx.strokeStyle=THEME['map-boundary'];ctx.lineWidth=gridStroke*2;ctx.beginPath();
+      for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++){const z=(data.mapHeight-1-row)*data.mapWidth+x,px=t.x+x*t.scale,py=t.y+row*t.scale;if(!owners.has(z))continue;ctx.beginPath();ctx.strokeStyle=THEME['map-boundary'];
         if(x===0||ownerKey(z-1)!==ownerKey(z)){ctx.moveTo(px,py);ctx.lineTo(px,py+t.scale);}
         if(x===data.mapWidth-1||ownerKey(z+1)!==ownerKey(z)){ctx.moveTo(px+t.scale,py);ctx.lineTo(px+t.scale,py+t.scale);}
         if(row===0||ownerKey(z+data.mapWidth)!==ownerKey(z)){ctx.moveTo(px,py);ctx.lineTo(px+t.scale,py);}
         if(row===data.mapHeight-1||ownerKey(z-data.mapWidth)!==ownerKey(z)){ctx.moveTo(px,py+t.scale);ctx.lineTo(px+t.scale,py+t.scale);}
-      }ctx.stroke();
-      for(const v of record.raw.villages)if(v.territory[0]>=0){const z=v.territory[0],px=t.x+(z%data.mapWidth+.5)*t.scale,py=t.y+(data.mapHeight-1-Math.floor(z/data.mapWidth)+.5)*t.scale,r=t.scale*.4;ctx.fillStyle=entityColor('villages',v.id);ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=Math.min(4,t.scale*.2);ctx.beginPath();ctx.moveTo(px,py-r);ctx.lineTo(px+r,py+r);ctx.lineTo(px-r,py+r);ctx.closePath();ctx.fill();ctx.stroke();}
-      if(mapNames)drawMapNames(ctx,t,frame,ownerKey);
+        ctx.stroke();
+      }
     }
-    if(mapSelection!=null){ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=2.5;ctx.strokeRect(t.x+(mapSelection%data.mapWidth)*t.scale,t.y+(data.mapHeight-1-Math.floor(mapSelection/data.mapWidth))*t.scale,t.scale,t.scale);}
+    const nameOpacity=mapNameOpacity(t);
+    if(structuresMap()) {
+      if(mapStructures)for(let row=r0;row<r1;row++)for(let x=x0;x<x1;x++){
+        const z=(data.mapHeight-1-row)*data.mapWidth+x,structure=zones[z*3+2];if(!structure)continue;
+        const v=owners.get(z);if(v?.territory[0]===z)continue;
+        const px=t.x+(x+.5)*t.scale,py=t.y+(row+.5)*t.scale,r=t.scale*.2;
+        ctx.fillStyle=mapColor(structure<=4?H.SPECIES[structure-1]:structure===5?'entity-data':'panel2');ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=gridStroke;
+        ctx.beginPath();ctx.moveTo(px,py-r);ctx.lineTo(px+r,py+r);ctx.lineTo(px-r,py+r);ctx.closePath();ctx.fill();ctx.stroke();
+      }
+      const capitals=frame.capitals;
+      for(const v of record.raw.villages){
+        const capital=capitals.get(String(v.id));
+        if(v.territory[0]<0)continue;
+        const isCapital=mapPolitical&&mapLayer==='kingdoms' && capital!=null && String(capital)===String(v.kingdom_id);
+        const z=v.territory[0],px=t.x+(z%data.mapWidth+.5)*t.scale,py=t.y+(data.mapHeight-1-Math.floor(z/data.mapWidth)+.5)*t.scale,r=t.scale*.4;
+        ctx.fillStyle=mapEntityColor('villages',v.id);ctx.strokeStyle=THEME['global-data'];ctx.lineWidth=gridStroke*2;ctx.beginPath();
+        if(isCapital)for(let point=0;point<10;point++){const a=-Math.PI/2+point*Math.PI/5,radius=point%2?r*.45:r,x=px+Math.cos(a)*radius,y=py+Math.sin(a)*radius;if(point===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+        else{ctx.moveTo(px,py-r);ctx.lineTo(px+r,py+r);ctx.lineTo(px-r,py+r);}
+        ctx.closePath();ctx.fill();ctx.stroke();
+      }
+
+    }
+
+    if(nameOpacity>.001)drawMapNames(ctx,t,frame,ownerKey,nameOpacity);
     updateMapSelection();
   }
   function zoomMap(factor,event) {
     const t=mapTransform();if(!t)return;
     const x=event?event.clientX-t.box.left:t.box.width/2,y=event?event.clientY-t.box.top:t.box.height/2;
     const gx=(x-t.x)/t.scale,gy=(y-t.y)/t.scale,oldZoom=mapCamera.zoom;
-    const [minZoom,maxZoom]=mapZoomBounds(t.box.width,t.base);
+    const [minZoom,maxZoom]=mapZoomBounds(t.box.width,t.base,t.box.height);
     mapCamera.zoom=Math.max(minZoom,Math.min(maxZoom,mapCamera.zoom*factor));
     const scale=t.scale*mapCamera.zoom/oldZoom;
     mapCamera.x=gx-(x-t.box.width/2)/scale;mapCamera.y=gy-(y-t.box.height/2)/scale;drawMap();
@@ -1115,9 +1235,18 @@
   function endMapGesture(e){if(!mapPointers.has(e.pointerId))return;mapPointers.delete(e.pointerId);if(!mapGesture?.moved&&e.type!=='pointercancel'){mapSelection=mapZone(e);drawMap();}if(!mapPointers.size)mapGesture=null;}
   $('main').addEventListener('pointerup',endMapGesture);$('main').addEventListener('pointercancel',endMapGesture);
   $('main').addEventListener('click',e=>{const b=e.target.closest('[data-map-zoom],[data-map-settings],[data-map-dismiss]');if(!b)return;if(b.hasAttribute('data-map-settings')){mapSettings=!mapSettings;$('map-settings').hidden=!mapSettings;b.setAttribute('aria-expanded',String(mapSettings));}else if(b.hasAttribute('data-map-dismiss'))mapSelection=null;else zoomMap(Number(b.dataset.mapZoom));drawMap();});
-  $('main').addEventListener('change',e=>{if(e.target.id==='map-layer'){mapLayer=e.target.value;$('map-names-control').hidden=mapLayer==='terrain';document.querySelector('.map-legend').innerHTML=mapLegend();drawMap();refreshHover();}else if(e.target.id==='map-names'){mapNames=e.target.checked;drawMap();}});
+  $('main').addEventListener('change',e=>{
+    if(e.target.id==='map-layer'||e.target.id==='map-physical'){if(e.target.id==='map-layer')mapLayer=e.target.value;else mapPhysical=e.target.value;mapColorKey=null;document.querySelector('.map-legend').innerHTML=mapLegend();drawMap();refreshHover();}
+    else if(e.target.id==='map-political'){mapPolitical=e.target.checked;document.querySelector('.map-legend').innerHTML=mapLegend();drawMap();refreshHover();}
+    else if(e.target.id==='map-structures'){mapStructures=e.target.checked;document.querySelector('.map-legend').innerHTML=mapLegend();drawMap();}
+    else if(e.target.id==='map-legend-toggle'){mapLegendVisible=e.target.checked;document.querySelector('.map-tools').hidden=!mapLegendVisible;drawMap();}
+    else if(e.target.id==='map-zoom-toggle'){mapZoomVisible=e.target.checked;document.querySelector('.map-zoom').hidden=!mapZoomVisible;drawMap();}
+  });
+  $('main').addEventListener('click',e=>{const swatch=e.target.closest('[data-map-color]');if(!swatch)return;mapColorKey=mapColorKey===swatch.dataset.mapColor?null:swatch.dataset.mapColor;document.querySelector('.map-legend').innerHTML=mapLegend();$('map-color')?.focus();});
+  $('main').addEventListener('input',e=>{if(e.target.id!=='map-color'||!mapColorKey)return;const value=e.target.value;const valid=/^#[0-9a-f]{6}$/i.test(value);e.target.setCustomValidity(valid?'':'Use a hex color such as #123456.');if(!valid)return;mapColors.set(mapColorKey,value);try{localStorage.setItem('historybox-map-colors',JSON.stringify(Object.fromEntries(mapColors)));}catch{}for(const swatch of document.querySelectorAll('[data-map-color]'))swatch.style.background=mapColor(swatch.dataset.mapColor);drawMap();});
   $('main').addEventListener('keydown',e=>{if(e.target.id==='world-map'&&['+','=','-','Home'].includes(e.key)){e.preventDefault();if(e.key==='Home'){mapCamera=null;drawMap();}else zoomMap(e.key==='-'?1/1.5:1.5);}});
-  new ResizeObserver(()=>{if($('world-map'))requestAnimationFrame(drawMap);}).observe($('main'));
+  new ResizeObserver(()=>{if($('world-map'))requestAnimationFrame(drawMap);else sizeParticipantTables();}).observe($('main'));
+  window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(drawMap));
   window.addEventListener('resize',()=>requestAnimationFrame(drawMap));
 
   function route() {
@@ -1207,6 +1336,7 @@
     for (const list of $('main').querySelectorAll('[data-events]')) { paintEvents(list); list.scrollTop = scrollPositions.get(list.dataset.events) || 0; paintEvents(list); }
     for (const element of $('main').querySelectorAll('[data-scroll]')) element.scrollTop = scrollPositions.get(element.dataset.scroll) || 0;
     $('main').querySelectorAll('.chart-frame,.donut-layout,.ranking-scroll,.timeline-scroll,.share-highlights').forEach((el,i) => { el.classList.remove('chart-enter'); el.dataset.animation = location.hash + ':' + i; el.dataset.animate = String(allowAnimation); observer.observe(el); });
+    sizeParticipantTables();
     observeNumbers(allowAnimation);
     if(r.name==='map')drawMap();
     if (live) refreshHover();
@@ -1219,11 +1349,12 @@
   }
   function loadError(error) {
     const m=error.message || '';
-    if (/map|territory/i.test(m)) return 'This history has missing or inconsistent map records. Choose a matching pair of files recorded with the map-enabled HistoryBox mod.';
+    if (/Unsupported or invalid (map baseline|biome legend)/.test(m)) return 'This history needs the current map format. Keep your older files safe and record a new history with the updated HistoryBox mod.';
+    if (/map|territory|biome/i.test(m)) return 'This history has missing or inconsistent map records. Choose a matching pair of files recorded with the map-enabled HistoryBox mod.';
     if (/different world/.test(m)) return 'These files belong to different worlds. Choose both files from the same world folder.';
     if (/different save/.test(m)) return 'These files belong to different save slots. Choose both files from the same save folder.';
     if (/different recording|last annual|metadata disagree/.test(m)) return 'These files were saved at different times. Pause recording and copy both files together again.';
-    if (/overview.json requires|single metadata header|fixed metadata header/.test(m)) return 'This history uses an older or unsupported format. Record a new history with the current HistoryBox mod.';
+    if (/Unsupported birth-year format|overview.json requires|single metadata header|fixed metadata header/.test(m)) return 'This history uses an older or unsupported format. Record a new history with the current HistoryBox mod.';
     if (/overview.json:/.test(m)) return 'The world records file could not be read. Select overview.json from your history folder.';
     if (/Annual history must/.test(m)) return 'Choose annual.jsonl for the annual history file.';
     if (/no observations/.test(m)) return 'This history has no recorded years yet. Enable recording in WorldBox and try again after a year passes.';
@@ -1232,9 +1363,12 @@
     if (/array|identity|interval|metadata|reference/i.test(m)) return 'Some world records are incomplete or invalid. Copy a fresh pair of files from the current HistoryBox mod.';
     return 'This history could not be opened. Check that you selected both files from the same history folder, then try again.';
   }
+  $('history-files').addEventListener('change',()=>{if($('history-files').files.length>2){$('history-files').value='';$('load-status').className='error';$('load-status').textContent='Select only overview.json and annual.jsonl together.';}else $('load-status').textContent='';});
   async function loadWorld(event, saved = null) {
     event?.preventDefault();
-    const metadata = saved ? new Blob([saved.metadata]) : $('metadata').files[0], annual = saved ? saved.annual : $('annual').files[0];
+    const files=saved?[]:[...$('history-files').files];
+    const metadata=saved?new Blob([saved.metadata]):files.find(f=>/\.json$/i.test(f.name)), annual=saved?saved.annual:files.find(f=>/\.(jsonl|ndjson|txt)$/i.test(f.name));
+    if(!saved&&(files.length!==2||!metadata||!annual)){$('load-status').className='error';$('load-status').textContent='Select exactly two files together: overview.json and annual.jsonl.';return;}
     if (!metadata || !annual) { $('load-status').className='error'; $('load-status').textContent='Choose both your world records and annual history before opening a world.'; return; }
     $('load').disabled = true; $('load-status').className = ''; $('load-status').textContent = 'Reading history…';
     try {
@@ -1243,7 +1377,7 @@
       const next = await H.parse(metadataText, annual, count => { $('load-status').textContent = `Indexed ${count.toLocaleString()} observations…`; });
       await H.prepare(next, message => { $('load-status').textContent = message; });
       stopPlayback(); finishNumbers(); animated.clear(); numberSeen.clear();
-      $('metadata').value = ''; $('annual').value = '';
+      $('history-files').value = '';
       mapCamera=null;mapSelection=null;mapFrame=null;
       openTabs.clear();
       data = next; year = next.years.at(-1); age = null; customWindow = false; windowStart = null; windowEnd = null;
@@ -1337,7 +1471,7 @@
   function showWorld(visible) {
     const open = visible && !!data;
     $('restore-status').hidden = true;
-    $('settings-button').hidden = false;
+    $('settings-button').hidden = !open; $('replace').hidden = !open;
     $('loader').hidden = open; $('main').hidden = !open;
     $('navigation-shell').hidden = !open; $('timeline-shell').hidden = !open;
     $('view-nav').hidden = !open; $('context').hidden = !open;
@@ -1374,6 +1508,8 @@
     const previous = range();
     customWindow = value === 'custom'; age = value === 'all' || customWindow ? null : Number(value);
     [windowStart,windowEnd] = previous;
+    const [lo,hi]=range();
+    if(year===null || year<lo || year>hi)year=scopeYears()[0] ?? null;
     syncWindow();
   }
   $('age').addEventListener('change', e => selectAge(e.target.value));
@@ -1415,7 +1551,9 @@
     const target = e.target.closest('button,a,[data-year]'); if (!target) return;
     if (target.dataset.allLegend) {
       const c = charts.get(target.dataset.allLegend), hidden = legendHidden.get(c.chartKey);
-      legendHidden.set(c.chartKey, hidden?.size ? new Set() : new Set(c.all.map(s => s.name))); render();
+      const next=new Set(hidden || []),show=c.all.some(s=>next.has(s.name));
+      for(const series of c.all)if(show)next.delete(series.name);else next.add(series.name);
+      legendHidden.set(c.chartKey,next); render();
     }
     if (target.dataset.allCompare) { const s = browserState(target.dataset.allCompare); s.selected = s.selected.length ? [] : [...s.filteredIds]; render(); }
     if (target.dataset.allColumns) { const s = browserState(target.dataset.allColumns), available = browserColumns(target.dataset.allColumns, s.mode); s.columns[s.mode] = s.columns[s.mode].length === available.length ? ['name'] : available; render(); }

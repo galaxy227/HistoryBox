@@ -246,14 +246,14 @@ namespace HistoryBox
                 changed = true;
             }
 
-            if (Map.Width == 0 && Map.Height == 0 && Map.Elevation.Count == 0)
+            if (Map.Width == 0 && Map.Height == 0 && Map.Zone.Count == 0)
             {
                 Map.Width = record.MapWidth;
                 Map.Height = record.MapHeight;
-                Map.Elevation = new List<int>(record.Elevation);
+                Map.Zone = new List<int[]>(record.Zones);
                 changed = true;
             }
-            else if (Map.Width != record.MapWidth || Map.Height != record.MapHeight || Map.Elevation.Count != record.Elevation.Count)
+            else if (Map.Width != record.MapWidth || Map.Height != record.MapHeight || Map.Zone.Count != record.Zones.Count)
             {
                 throw new InvalidDataException("Recorded map dimensions changed.");
             }
@@ -316,6 +316,7 @@ namespace HistoryBox
                         Id = state.Id,
                         Name = state.Name,
                         FoundingSpecies = state.Species,
+                        BirthYear = state.BirthYear,
                         StartYear = Lifecycle.Begin(year, previous)
                     };
 
@@ -363,6 +364,7 @@ namespace HistoryBox
                         Id = state.Id,
                         Name = state.Name,
                         FoundingSpecies = state.Species,
+                        BirthYear = state.BirthYear,
                         StartYear = Lifecycle.Begin(year, previous)
                     };
 
@@ -413,7 +415,8 @@ namespace HistoryBox
                         Name = state.Name,
                         Species = state.Species,
                         Gender = state.Gender,
-                        StartYear = state.BirthYear
+                        BirthYear = state.BirthYear,
+                        StartYear = Lifecycle.Begin(year, previous)
                     };
                     Characters.Add(entry);
                     known.Add(entry.Id, entry);
@@ -421,7 +424,6 @@ namespace HistoryBox
                 }
                 else
                 {
-                    if (Convert.ToInt32(entry.StartYear, CultureInfo.InvariantCulture) != state.BirthYear) throw new InvalidDataException("Character birth year changed: " + state.Id);
                     changed |= Lifecycle.Open(entry);
                     if (entry.Name != state.Name) { entry.Name = state.Name; changed = true; }
                 }
@@ -444,7 +446,6 @@ namespace HistoryBox
                     if (known.TryGetValue(parentId, out parent))
                     {
                         CharacterMetadata child = known[state.Id];
-                        if (Convert.ToInt32(parent.StartYear, CultureInfo.InvariantCulture) > Convert.ToInt32(child.StartYear, CultureInfo.InvariantCulture)) throw new InvalidDataException("Parent born after child: " + state.Id);
                         HashSet<long> visited = new HashSet<long>();
                         Stack<long> ancestors = new Stack<long>(); ancestors.Push(parentId);
                         while (ancestors.Count > 0)
@@ -529,6 +530,7 @@ namespace HistoryBox
                         Id = state.Id,
                         Name = state.Name,
                         WarType = state.WarType,
+                        BirthYear = state.BirthYear,
                         StartYear = Lifecycle.Begin(year, previous),
                         Instigator = state.Instigator
                     };
@@ -654,6 +656,7 @@ namespace HistoryBox
                     {
                         Id = state.Id,
                         Name = state.Name,
+                        BirthYear = state.BirthYear,
                         StartYear = Lifecycle.Begin(year, previous)
                     };
 
@@ -847,12 +850,70 @@ namespace HistoryBox
         [DataMember(Name = "year", Order = 4)] public int Year = -1;
     }
 
+    internal sealed class CapturedZone
+    {
+        public int Terrain;
+        public string Biome;
+        public int Structure;
+    }
+
+    internal static class MapCodec
+    {
+        internal static readonly string[] Prefix = { null, "arcane_desert", "birch", "candy", "celestial", "clover", "corrupted", "crystal", "enchanted", "flower", "garlic", "grass", "infernal", "jungle", "lemon", "maple", "mushroom", "paradox", "permafrost", "rocklands", "savanna", "singularity_swamp", "swamp", "wasteland", "sand", "hill", "tumor", "biomass", "pumpkin", "cyber" };
+        // Exact BiomeLibrary IDs inspected in WorldBox 0.51.2 build 719. All six
+        // reserved specials have actual biome assets; no terrain/spawner inference.
+        internal static readonly string[] VanillaIds = { null, "biome_desert", "biome_birch", "biome_candy", "biome_celestial", "biome_clover", "biome_corrupted", "biome_crystal", "biome_enchanted", "biome_flower", "biome_garlic", "biome_grass", "biome_infernal", "biome_jungle", "biome_lemon", "biome_maple", "biome_mushroom", "biome_paradox", "biome_permafrost", "biome_rocklands", "biome_savanna", "biome_singularity", "biome_swamp", "biome_wasteland", "biome_sand", "biome_hill", "biome_tumor", "biome_biomass", "biome_pumpkin", "biome_cybertile" };
+        private static readonly Dictionary<string, int> Vanilla = BuildVanilla();
+        private static Dictionary<string, int> BuildVanilla() { var result = new Dictionary<string, int>(StringComparer.Ordinal); for (int i = 1; i < VanillaIds.Length; i++) result.Add(VanillaIds[i], i); return result; }
+        public static List<string> NewLegend() { return new List<string>(Prefix); }
+        // Escape canonical-name collisions AND raw IDs already beginning asset:.
+        // Decoding removes exactly one prefix, preserving every possible raw ID.
+        internal static string Encode(string raw) { return raw.StartsWith("asset:", StringComparison.Ordinal) || Array.IndexOf(Prefix, raw) >= 0 ? "asset:" + raw : raw; }
+        internal static string Decode(string entry) { return entry.StartsWith("asset:", StringComparison.Ordinal) ? entry.Substring(6) : entry; }
+        public static void ValidateLegend(List<string> legend)
+        {
+            if (legend == null || legend.Count < Prefix.Length) throw new InvalidDataException("Missing or incompatible biome registry.");
+            var strings = new HashSet<string>(StringComparer.Ordinal); var rawIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < legend.Count; i++)
+            {
+                string entry = legend[i];
+                if (!strings.Add(entry) || (i < Prefix.Length ? entry != Prefix[i] : string.IsNullOrWhiteSpace(entry))) throw new InvalidDataException("Invalid biome registry entry.");
+                if (i >= Prefix.Length) { string raw = Decode(entry); if (string.IsNullOrWhiteSpace(raw) || Encode(raw) != entry || Vanilla.ContainsKey(raw) || !rawIds.Add(raw)) throw new InvalidDataException("Conflicting biome asset identity."); }
+            }
+        }
+        public static void ValidateZone(int[] zone, int biomes)
+        {
+            if (zone == null || zone.Length != 3 || zone[0] < 0 || zone[0] > 4 || zone[1] < 0 || zone[1] >= biomes || zone[2] < 0 || zone[2] > 6) throw new InvalidDataException("Invalid zone triple.");
+        }
+        public static bool Equal(int[] a, int[] b) { return a[0] == b[0] && a[1] == b[1] && a[2] == b[2]; }
+        public static int Plurality(int[] counts) { int winner = 0; for (int i = 1; i < counts.Length; i++) if (counts[i] > 0 && counts[i] >= counts[winner]) winner = i; return winner; }
+        public static string BiomeWinner(Dictionary<string, int> counts)
+        {
+            string chosen = ""; int most = 0;
+            foreach (var pair in counts) if (pair.Value > most || pair.Value == most && pair.Key != "" && (chosen == "" || StringComparer.Ordinal.Compare(pair.Key, chosen) < 0)) { chosen = pair.Key; most = pair.Value; }
+            return chosen == "" ? null : chosen;
+        }
+        public static List<int[]> Resolve(MapMetadata map, List<CapturedZone> states)
+        {
+            ValidateLegend(map.Biomes);
+            var known = new Dictionary<string, int>(Vanilla, StringComparer.Ordinal);
+            for (int i = Prefix.Length; i < map.Biomes.Count; i++) known.Add(Decode(map.Biomes[i]), i);
+            var additions = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (CapturedZone state in states) if (state.Biome != null && !known.ContainsKey(state.Biome)) additions.Add(state.Biome);
+            foreach (string raw in additions) { known.Add(raw, map.Biomes.Count); map.Biomes.Add(Encode(raw)); }
+            var result = new List<int[]>(states.Count);
+            foreach (CapturedZone state in states) result.Add(new int[] { state.Terrain, state.Biome == null ? 0 : known[state.Biome], state.Structure });
+            return result;
+        }
+    }
+
     [DataContract]
     internal sealed class MapMetadata
     {
         [DataMember(Name = "width", Order = 1)] public int Width;
         [DataMember(Name = "height", Order = 2)] public int Height;
-        [DataMember(Name = "elevation", Order = 3)] public List<int> Elevation = new List<int>();
+        [DataMember(Name = "biomes", Order = 3, IsRequired = true)] public List<string> Biomes = MapCodec.NewLegend();
+        [DataMember(Name = "zone", Order = 4, IsRequired = true)] public List<int[]> Zone = new List<int[]>();
     }
 
     [DataContract]
@@ -870,8 +931,9 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "founding_species", Order = 3)] public string FoundingSpecies;
-        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
-        [DataMember(Name = "end_year", Order = 5)] public object EndYear;
+        [DataMember(Name = "birth_year", Order = 4, IsRequired = true)] public int BirthYear;
+        [DataMember(Name = "start_year", Order = 5)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 6)] public object EndYear;
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -881,8 +943,9 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "founding_species", Order = 3)] public string FoundingSpecies;
-        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
-        [DataMember(Name = "end_year", Order = 5)] public object EndYear;
+        [DataMember(Name = "birth_year", Order = 4, IsRequired = true)] public int BirthYear;
+        [DataMember(Name = "start_year", Order = 5)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 6)] public object EndYear;
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -893,11 +956,12 @@ namespace HistoryBox
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "species", Order = 3)] public string Species;
         [DataMember(Name = "gender", Order = 4)] public string Gender;
-        [DataMember(Name = "start_year", Order = 5)] public object StartYear;
-        [DataMember(Name = "end_year", Order = 6)] public object EndYear;
-        [DataMember(Name = "p", Order = 7)] public List<long> Parents = new List<long>();
-        [DataMember(Name = "s", Order = 8)] public List<long> Siblings = new List<long>();
-        [DataMember(Name = "c", Order = 9)] public List<long> Children = new List<long>();
+        [DataMember(Name = "birth_year", Order = 5, IsRequired = true)] public int BirthYear;
+        [DataMember(Name = "start_year", Order = 6)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 7)] public object EndYear;
+        [DataMember(Name = "p", Order = 8)] public List<long> Parents = new List<long>();
+        [DataMember(Name = "s", Order = 9)] public List<long> Siblings = new List<long>();
+        [DataMember(Name = "c", Order = 10)] public List<long> Children = new List<long>();
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -907,10 +971,11 @@ namespace HistoryBox
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
         [DataMember(Name = "war_type", Order = 3)] public string WarType;
-        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
-        [DataMember(Name = "end_year", Order = 5)] public object EndYear;
-        [DataMember(Name = "instigator", Order = 6)] public long? Instigator;
-        [DataMember(Name = "kingdoms", Order = 7)] public List<WarKingdomMetadata> Kingdoms = new List<WarKingdomMetadata>();
+        [DataMember(Name = "birth_year", Order = 4, IsRequired = true)] public int BirthYear;
+        [DataMember(Name = "start_year", Order = 5)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 6)] public object EndYear;
+        [DataMember(Name = "instigator", Order = 7)] public long? Instigator;
+        [DataMember(Name = "kingdoms", Order = 8)] public List<WarKingdomMetadata> Kingdoms = new List<WarKingdomMetadata>();
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -935,9 +1000,10 @@ namespace HistoryBox
     {
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "name", Order = 2)] public string Name;
-        [DataMember(Name = "start_year", Order = 3)] public object StartYear;
-        [DataMember(Name = "end_year", Order = 4)] public object EndYear;
-        [DataMember(Name = "kingdoms", Order = 5)] public List<AllianceKingdomMetadata> Kingdoms = new List<AllianceKingdomMetadata>();
+        [DataMember(Name = "birth_year", Order = 3, IsRequired = true)] public int BirthYear;
+        [DataMember(Name = "start_year", Order = 4)] public object StartYear;
+        [DataMember(Name = "end_year", Order = 5)] public object EndYear;
+        [DataMember(Name = "kingdoms", Order = 6)] public List<AllianceKingdomMetadata> Kingdoms = new List<AllianceKingdomMetadata>();
         object IInterval.End { get { return EndYear; } set { EndYear = value; } }
     }
 
@@ -967,7 +1033,8 @@ namespace HistoryBox
         [DataMember(Name = "wars", Order = 6)] public List<WarAnnual> Wars = new List<WarAnnual>();
         public int MapWidth;
         public int MapHeight;
-        public List<int> Elevation = new List<int>();
+        public List<CapturedZone> ZoneStates = new List<CapturedZone>();
+        public List<int[]> Zones = new List<int[]>();
         public string WorldName;
         public string Age;
         public List<AllianceState> Alliances = new List<AllianceState>();
@@ -1003,6 +1070,7 @@ namespace HistoryBox
     [DataContract]
     internal sealed class KingdomAnnual
     {
+        public int BirthYear;
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "cities", Order = 2)] public List<long> Cities = new List<long>();
         [DataMember(Name = "king_id", Order = 3)] public long? KingId;
@@ -1014,6 +1082,7 @@ namespace HistoryBox
     [DataContract]
     internal sealed class VillageAnnual
     {
+        public int BirthYear;
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "kingdom_id", Order = 2)] public long? KingdomId;
         [DataMember(Name = "population", Order = 3)] public int Population;
@@ -1023,7 +1092,7 @@ namespace HistoryBox
         [DataMember(Name = "dwarf", Order = 7)] public int Dwarf;
         [DataMember(Name = "army", Order = 8)] public int Army;
         [DataMember(Name = "loyalty", Order = 9)] public int Loyalty;
-        [DataMember(Name = "houses", Order = 10)] public int Houses;
+        [DataMember(Name = "structures", Order = 10)] public int Structures;
         [DataMember(Name = "food", Order = 11)] public int Food;
         [DataMember(Name = "coins", Order = 12)] public int Coins;
         [DataMember(Name = "leader_id", Order = 13)] public long? LeaderId;
@@ -1046,6 +1115,7 @@ namespace HistoryBox
     [DataContract]
     internal sealed class CharacterAnnual
     {
+        // Effective birth year is captured below and frozen on enrollment.
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "kingdom_id", Order = 2)] public long? KingdomId;
         [DataMember(Name = "village_id", Order = 3)] public long? VillageId;
@@ -1065,6 +1135,7 @@ namespace HistoryBox
     [DataContract]
     internal sealed class WarAnnual
     {
+        public int BirthYear;
         [DataMember(Name = "id", Order = 1)] public long Id;
         [DataMember(Name = "attacker_deaths", Order = 2)] public int AttackerDeaths;
         [DataMember(Name = "defender_deaths", Order = 3)] public int DefenderDeaths;
@@ -1082,6 +1153,7 @@ namespace HistoryBox
 
     internal sealed class AllianceState
     {
+        public int BirthYear;
         public long Id;
         public string Name;
         public List<long> Kingdoms = new List<long>();
@@ -1147,22 +1219,26 @@ namespace HistoryBox
         internal static void Validate(AnnualRecord record)
         {
             if (record.World == null || record.World.Year < 0) throw new InvalidDataException("Missing annual world/year.");
-            if (record.MapWidth <= 0 || record.MapHeight <= 0 || (long)record.MapWidth * record.MapHeight != record.Elevation.Count) throw new InvalidDataException("Invalid map dimensions or elevation count.");
-            foreach (int elevation in record.Elevation) if (elevation < 0 || elevation > 3) throw new InvalidDataException("Invalid map elevation category.");
+            if (record.MapWidth <= 0 || record.MapHeight <= 0 || (long)record.MapWidth * record.MapHeight != record.ZoneStates.Count) throw new InvalidDataException("Invalid map dimensions or zone count.");
+            foreach (CapturedZone zone in record.ZoneStates) if (zone == null || zone.Terrain < 0 || zone.Terrain > 4 || zone.Structure < 0 || zone.Structure > 6 || zone.Biome != null && string.IsNullOrWhiteSpace(zone.Biome)) throw new InvalidDataException("Invalid captured zone state.");
             HashSet<int> assignedZones = new HashSet<int>();
             if (record.World.GlobalPopulation < 0 || record.World.Human < 0 || record.World.Elf < 0 || record.World.Orc < 0 || record.World.Dwarf < 0 || (long)record.World.Human + record.World.Elf + record.World.Orc + record.World.Dwarf != record.World.GlobalPopulation) throw new InvalidDataException("Inconsistent world population.");
             foreach (VillageAnnual v in record.Villages)
             {
-                if (v.Population < 0 || v.Human < 0 || v.Elf < 0 || v.Orc < 0 || v.Dwarf < 0 || v.Army < 0 || v.Houses < 0 || v.Food < 0 || v.Coins < 0 || (long)v.Human + v.Elf + v.Orc + v.Dwarf > v.Population) throw new InvalidDataException("Invalid village measurements: " + v.Id);
+                if (v.Population < 0 || v.Human < 0 || v.Elf < 0 || v.Orc < 0 || v.Dwarf < 0 || v.Army < 0 || v.Structures < 0 || v.Food < 0 || v.Coins < 0 || (long)v.Human + v.Elf + v.Orc + v.Dwarf > v.Population) throw new InvalidDataException("Invalid village measurements: " + v.Id);
                 if (v.Territory == null || v.Territory.Count == 0) throw new InvalidDataException("Village territory must contain a bonfire ID or -1: " + v.Id);
                 for (int i = 0; i < v.Territory.Count; i++)
                 {
                     int id = v.Territory[i];
                     if (i > 1 && id <= v.Territory[i - 1]) throw new InvalidDataException("Unsorted village territory zones: " + v.Id);
                     if (id == -1 && i == 0) continue;
-                    if (id < 0 || id >= record.Elevation.Count || !assignedZones.Add(id)) throw new InvalidDataException("Invalid or duplicated territory zone: " + id);
+                    if (id < 0 || id >= record.ZoneStates.Count || !assignedZones.Add(id)) throw new InvalidDataException("Invalid or duplicated territory zone: " + id);
                 }
             }
+            foreach (KingdomAnnual k in record.Kingdoms) if (k.BirthYear > record.World.Year) throw new InvalidDataException("Future kingdom creation year: " + k.Id);
+            foreach (VillageAnnual v in record.Villages) if (v.BirthYear > record.World.Year) throw new InvalidDataException("Future village creation year: " + v.Id);
+            foreach (WarAnnual w in record.Wars) if (w.BirthYear > record.World.Year) throw new InvalidDataException("Future war creation year: " + w.Id);
+            foreach (AllianceState a in record.Alliances) if (a.BirthYear > record.World.Year) throw new InvalidDataException("Future alliance creation year: " + a.Id);
             HashSet<long> characterIds = new HashSet<long>();
             HashSet<long> villageIds = new HashSet<long>();
             HashSet<long> kingdomIds = new HashSet<long>();
@@ -1171,7 +1247,7 @@ namespace HistoryBox
             foreach (CharacterAnnual character in record.Characters)
             {
                 if (!characterIds.Add(character.Id)) throw new InvalidDataException("Duplicate character ID: " + character.Id);
-                if (character.BirthYear < 0 || character.BirthYear > record.World.Year) throw new InvalidDataException("Invalid character birth year: " + character.Id);
+                if (character.BirthYear > record.World.Year) throw new InvalidDataException("Invalid character birth year: " + character.Id);
                 if (character.Role != null && character.Role != "king" && character.Role != "leader" && character.Role != "captain" && character.Role != "warrior" && character.Role != "citizen") throw new InvalidDataException("Invalid character role: " + character.Id);
                 if (character.Level.HasValue && character.Level.Value < 0 || character.Coins.HasValue && character.Coins.Value < 0 || character.Kills.HasValue && character.Kills.Value < 0) throw new InvalidDataException("Invalid character measurements: " + character.Id);
                 if (character.KingdomId.HasValue && !kingdomIds.Contains(character.KingdomId.Value)) throw new InvalidDataException("Unresolved character kingdom: " + character.Id);
@@ -1222,8 +1298,9 @@ namespace HistoryBox
             ZoneMap result = rebuild ? new ZoneMap { Width = width, Height = height } : cachedMap;
             int count = width * height;
             // A per-capture array owns the immutable observation; only lookup geometry
-            // and asset classifications survive between captures, never elevations.
-            int[] elevations = new int[count];
+            // and asset classifications survive between captures, never captured states.
+            CapturedZone[] states = new CapturedZone[count];
+            var buildingStyles = new Dictionary<Building, int>();
             bool[] seen = new bool[count]; int zones = 0;
             foreach (object raw in Reader.Enumerate(Reader.Require(calculator, "zones")))
             {
@@ -1243,7 +1320,9 @@ namespace HistoryBox
                 {
                     ClearMapCache(); return ReadMap(world, record); // Same MapBox instance may reload geometry.
                 }
-                int water = 0, plain = 0, hill = 0, mountain = 0, tiles = 0; ulong positions = 0;
+                int[] terrains = new int[5], structures = new int[7];
+                Dictionary<string, int> biomes = new Dictionary<string, int>(StringComparer.Ordinal);
+                int tiles = 0; ulong positions = 0;
                 if (zone.tiles == null) throw new InvalidDataException("Missing zone tiles.");
                 foreach (WorldTile tile in zone.tiles)
                 {
@@ -1256,29 +1335,52 @@ namespace HistoryBox
                     TileTypeBase type = (TileTypeBase)tile.main_type ?? Reader.Get(tile, "cur_tile_type") as TileTypeBase;
                     if (type == null) throw new InvalidDataException("Tile has no terrain type.");
                     int category;
-                    if (!terrainClasses.TryGetValue(type, out category)) { category = TileElevation(type); terrainClasses.Add(type, category); }
-                    if (category == 0) water++; else if (category == 1) plain++; else if (category == 2) hill++; else mountain++;
+                    if (!terrainClasses.TryGetValue(type, out category)) { category = TileTerrain(type); terrainClasses.Add(type, category); }
+                    terrains[category]++;
+                    BiomeAsset biome = tile.getBiome();
+                    string biomeId = biome == null ? "" : biome.id;
+                    if (biome != null && string.IsNullOrWhiteSpace(biomeId)) throw new InvalidDataException("Biome asset has no identity.");
+                    int votes; biomes.TryGetValue(biomeId, out votes); biomes[biomeId] = votes + 1;
+                    int structure = 0;
+                    if (tile.building != null && !buildingStyles.TryGetValue(tile.building, out structure)) { structure = TileStructure(tile); buildingStyles.Add(tile.building, structure); }
+                    if (structure > 0) structures[structure]++;
                     tiles++;
                 }
                 if (tiles != Math.Min(8, MapBox.width - x * 8) * Math.Min(8, MapBox.height - y * 8)) throw new InvalidDataException("Incomplete WorldBox zone tile coverage.");
-                int chosen = 0, majority = water;
-                if (plain >= majority) { chosen = 1; majority = plain; }
-                if (hill >= majority) { chosen = 2; majority = hill; }
-                if (mountain >= majority) chosen = 3;
-                elevations[index] = chosen;
+                states[index] = new CapturedZone { Terrain = MapCodec.Plurality(terrains), Biome = MapCodec.BiomeWinner(biomes), Structure = MapCodec.Plurality(structures) };
             }
             if (zones != count) throw new InvalidDataException("Incomplete WorldBox zone grid.");
             cachedWorld = world; cachedCalculator = calculator; cachedMap = result;
-            record.MapWidth = width; record.MapHeight = height; record.Elevation = new List<int>(elevations);
+            record.MapWidth = width; record.MapHeight = height; record.ZoneStates = new List<CapturedZone>(states);
             return result;
         }
-        private static int TileElevation(TileTypeBase type)
+        // WorldTile.building is the authoritative occupied-tile reference. setBuildingTile
+        // fills every footprint tile, and clearTiles removes those references. No anchors,
+        // owner species or per-zone global registry scans are used.
+        internal static int TileStructure(WorldTile tile)
+        {
+            Building building = tile.building;
+            if (building == null || !building.isAlive()) return 0;
+            BuildingAsset asset = Reader.Require(building, "asset") as BuildingAsset;
+            if (asset == null) throw new InvalidDataException("Occupied building has no asset.");
+            if (!asset.city_building && asset.group != "civ_building") return 0;
+            // The game retains occupied tiles in BuildingState.ruin; final removal clears them.
+            object ruin = Reader.Call(building, "isRuin");
+            if (!(ruin is bool)) throw new InvalidDataException("Building ruin state is unavailable.");
+            if ((bool)ruin) return 6;
+            // BuildingLibrary.initBuildingsFromArchitectures assigns the architecture
+            // asset ID to civ_kingdom. Shared assets have no verified species style.
+            switch (asset.civ_kingdom) { case "human": return 1; case "elf": return 2; case "orc": return 3; case "dwarf": return 4; default: return 5; }
+        }
+
+        private static int TileTerrain(TileTypeBase type)
         {
             string id = type.id;
+            if (type.lava) return 4;
             if (type.summit || type.mountains || id == "summit" || id == "mountains") return 3;
             if (type.rocks || id == "hills") return 2;
             if (type.ocean || id == "deep_ocean" || id == "close_ocean" || id == "shallow_waters" || id == "pit_deep_ocean" || id == "pit_close_ocean" || id == "pit_shallow_waters") return 0;
-            if (type.ground || id == "sand" || id == "soil_low" || id == "soil_high" || type.lava || id == "grey_goo") return 1;
+            if (type.ground || id == "sand" || id == "soil_low" || id == "soil_high" || id == "grey_goo") return 1;
             throw new InvalidDataException("Unclassified WorldBox terrain type: " + (id ?? "null"));
         }
 
@@ -1287,6 +1389,7 @@ namespace HistoryBox
             object buildings = Reader.CallString(city, "getBuildingListOfID", "bonfire");
             if (buildings == null) return -1;
             int result = -1;
+            bool ambiguous = false;
             foreach (object building in Reader.Enumerate(buildings))
             {
                 if (building == null || Reader.Inactive(building)) continue;
@@ -1298,10 +1401,13 @@ namespace HistoryBox
                 object zone = Reader.Require(tile, "zone");
                 int id = map.Index(zone);
                 if (!territory.Contains(id)) continue;
-                if (result >= 0 && result != id) throw new InvalidDataException("Multiple bonfire zones found for one village.");
+                // The game's building list may contain multiple normal bonfires.
+                // Without a unique location, use the existing unknown-anchor value
+                // rather than guessing a primary bonfire or rejecting the year.
+                if (result >= 0 && result != id) ambiguous = true;
                 result = id;
             }
-            return result;
+            return ambiguous ? -1 : result;
         }
 
         private static string ReadAge(object world)
@@ -1335,6 +1441,13 @@ namespace HistoryBox
             result.Finish();
         }
 
+        internal static int CreationYear(object entity)
+        {
+            double timestamp = Convert.ToDouble(Reader.Require(Reader.Require(entity, "data"), "created_time"), CultureInfo.InvariantCulture);
+            if (double.IsNaN(timestamp) || double.IsInfinity(timestamp)) throw new InvalidDataException("Invalid entity creation timestamp.");
+            return Date.getYear(timestamp);
+        }
+
         private static void ReadKingdoms(object world, List<KingdomAnnual> result)
         {
             HashSet<long> ids = new HashSet<long>();
@@ -1358,6 +1471,7 @@ namespace HistoryBox
                 {
                     Id = id,
                     Name = Reader.Name(kingdom),
+                    BirthYear = CreationYear(kingdom),
                     Species = Reader.Text(Reader.Call(kingdom, "getFounderSpecies"), "id"),
                     KingId = LiveId(Reader.Member(kingdom, "king")),
                     CapitalId = LiveId(Reader.Member(kingdom, "capital"))
@@ -1403,11 +1517,12 @@ namespace HistoryBox
                     KingdomId = kingdom == null ? (long?)null : Reader.Id(kingdom),
                     LeaderId = LiveId(Reader.Member(city, "leader")),
                     Name = Reader.Name(city),
+                    BirthYear = CreationYear(city),
                     Species = Reader.Text(Reader.Call(city, "getFounderSpecies"), "id"),
                     Population = Reader.Int(Reader.Call(city, "getPopulationPeople")),
                     Army = Reader.Int(Reader.Call(city, "countWarriors")),
                     Loyalty = Reader.Int(Reader.Call(city, "getCachedLoyalty")),
-                    Houses = Reader.Int(Reader.Call(city, "getHouseCurrent")),
+                    Structures = Reader.Int(Reader.Call(city, "getHouseCurrent")),
                     Food = Reader.Int(Reader.Call(city, "getTotalFood")),
                     Coins = Reader.Int(Reader.Call(city, "countTotalMoney"))
                 };
@@ -1465,8 +1580,11 @@ namespace HistoryBox
                 if (!ids.Add(id)) throw new InvalidDataException("Duplicate character ID: " + id);
 
                 object actorData = Reader.Require(actor, "data");
-                object birth = Reader.Require(actorData, "created_time");
-                int birthYear = Date.getYear(Convert.ToSingle(birth, CultureInfo.InvariantCulture));
+                // Includes spawn age and any artificial aging before enrollment.
+                // UpdateCharacters freezes this effective birth year on first recording.
+                int age = Reader.Int(Reader.Call(actor, "getAge"));
+                if (age < 0) throw new InvalidDataException("Invalid character age: " + id);
+                int birthYear = checked(year - age);
                 if (birthYear > year) throw new InvalidDataException("Invalid character birthday: " + id);
                 long? kingdomId = LiveId(liveKingdom);
                 long? villageId = LiveId(liveCity);
@@ -1553,6 +1671,7 @@ namespace HistoryBox
                 {
                     Id = id,
                     Name = Reader.Name(war),
+                    BirthYear = CreationYear(war),
                     WarType = Reader.Text(data, "war_type"),
                     Instigator = Reader.NullableId(Reader.Get(data, "started_by_kingdom_id")),
                     AttackerDeaths = Reader.Int(Reader.Call(war, "getDeadAttackers")),
@@ -1607,7 +1726,7 @@ namespace HistoryBox
                     throw new InvalidDataException("Duplicate alliance ID: " + id);
                 }
 
-                AllianceState entry = new AllianceState { Id = id, Name = Reader.Name(alliance) };
+                AllianceState entry = new AllianceState { Id = id, Name = Reader.Name(alliance), BirthYear = CreationYear(alliance) };
 
                 foreach (object kingdom in Reader.Enumerate(Reader.Require(alliance, "kingdoms_list")))
                 {
@@ -1888,7 +2007,7 @@ namespace HistoryBox
     {
         private string directory;
         private MetadataRecord metadata;
-        private int[] committedElevation;
+        private int[][] committedZones;
         public string WorldId { get; private set; }
         public int? Slot { get; private set; }
         public int LastYear { get; private set; }
@@ -1921,7 +2040,7 @@ namespace HistoryBox
 
             Slot = slot;
             LastYear = HistoryStorage.GetLastYear(directory);
-            if (LastYear >= 0) committedElevation = HistoryStorage.LoadElevation(directory, metadata.Map, LastYear);
+            if (LastYear >= 0) committedZones = HistoryStorage.LoadZones(directory, metadata.Map, LastYear);
 
             if (metadata.World.Id == null)
             {
@@ -1941,7 +2060,7 @@ namespace HistoryBox
             if (!HistoryStorage.Recover(directory)) return;
             metadata = HistoryStorage.LoadMetadata(directory);
             LastYear = metadata.World.Year;
-            committedElevation = LastYear < 0 ? null : HistoryStorage.LoadElevation(directory, metadata.Map, LastYear);
+            committedZones = LastYear < 0 ? null : HistoryStorage.LoadZones(directory, metadata.Map, LastYear);
         }
         public void Record(AnnualRecord record)
         {
@@ -1954,21 +2073,23 @@ namespace HistoryBox
             }
 
             MetadataRecord candidate = HistoryStorage.Clone(metadata);
+            record.Zones = MapCodec.Resolve(candidate.Map, record.ZoneStates);
             candidate.Update(record, LastYear);
+            HistoryStorage.ValidateMap(candidate.Map);
             record.Map.Clear();
-            if (committedElevation != null)
+            if (committedZones != null)
             {
-                if (committedElevation.Length != record.Elevation.Count) throw new InvalidDataException("Previously committed map size changed.");
-                for (int i = 0; i < committedElevation.Length; i++)
+                if (committedZones.Length != record.Zones.Count) throw new InvalidDataException("Previously committed map size changed.");
+                for (int i = 0; i < committedZones.Length; i++)
                 {
-                    if (committedElevation[i] != record.Elevation[i]) record.Map.Add(new int[] { i, record.Elevation[i] });
+                    if (!MapCodec.Equal(committedZones[i], record.Zones[i])) record.Map.Add(new int[] { i, record.Zones[i][0], record.Zones[i][1], record.Zones[i][2] });
                 }
             }
             candidate.World.Year = record.World.Year;
             Performance.End("prepare", timing);
             HistoryStorage.Commit(directory, candidate, record, null, LastYear);
             metadata = candidate;
-            committedElevation = record.Elevation.ToArray();
+            committedZones = record.Zones.ToArray();
             LastYear = record.World.Year;
         }
 
@@ -1997,6 +2118,9 @@ namespace HistoryBox
             copy.World.Slot = slot;
             copy.Trim(year);
             copy.World.Year = HistoryStorage.GetLastYear(directory, year);
+            // A cutoff before the first observation has no historical baseline.
+            // Keep allocated biome identities, but capture its new baseline on first write.
+            if (copy.World.Year < 0) { copy.Map.Width = 0; copy.Map.Height = 0; copy.Map.Zone.Clear(); }
             copy.RetainRecordedCharacters(HistoryStorage.GetRecordedCharacters(directory, copy.World.Year));
             HistoryStorage.Commit(target, copy, null, directory);
 
@@ -2007,7 +2131,7 @@ namespace HistoryBox
                 LastYear = HistoryStorage.GetLastYear(target),
                 directory = target,
                 metadata = copy,
-                committedElevation = HistoryStorage.LoadElevation(target, copy.Map, copy.World.Year)
+                committedZones = HistoryStorage.LoadZones(target, copy.Map, copy.World.Year)
             };
         }
     }
@@ -2209,7 +2333,10 @@ namespace HistoryBox
                     continue;
                 }
 
-                MetadataRecord existing = LoadMetadata(folder);
+                // Only identity is needed while finding a world. An older, unrelated
+                // history must not prevent recording a different world in the new format.
+                OverviewIdentity existing = Deserialize<OverviewIdentity>(File.ReadAllText(MetadataPath(folder)));
+                if (existing == null || existing.World == null) throw new InvalidDataException("HistoryBox overview identity is invalid.");
 
                 if (existing.World.Id == id && existing.World.Slot == slot)
                 {
@@ -2318,6 +2445,15 @@ namespace HistoryBox
             return Path.Combine(directory, "annual.jsonl");
         }
 
+        [DataContract]
+        private sealed class OverviewIdentity
+        {
+            [DataMember(Name = "metadata")] public WorldMetadata World { get; set; }
+        }
+
+        [DataContract]
+        private sealed class MapProbe { [DataMember(Name = "map")] public MapMetadata Map { get; set; } }
+
         public static MetadataRecord LoadMetadata(string directory)
         {
             Recover(directory);
@@ -2364,15 +2500,28 @@ namespace HistoryBox
 
         public static void ValidateMap(MapMetadata map)
         {
-            if (map == null || map.Width <= 0 || map.Height <= 0 || map.Elevation == null || (long)map.Width * map.Height != map.Elevation.Count) throw new InvalidDataException("Invalid map baseline or incompatible history format.");
-            foreach (int value in map.Elevation) if (value < 0 || value > 3) throw new InvalidDataException("Invalid baseline terrain category.");
+            if (map == null || map.Width <= 0 || map.Height <= 0 || map.Zone == null || (long)map.Width * map.Height != map.Zone.Count) throw new InvalidDataException("Invalid zone baseline or incompatible history format.");
+            MapCodec.ValidateLegend(map.Biomes);
+            foreach (int[] value in map.Zone) MapCodec.ValidateZone(value, map.Biomes.Count);
         }
 
-        public static int[] LoadElevation(string directory, MapMetadata map, int maximum)
+        private static void ValidateChanges(List<int[]> changes, MapMetadata map, bool first)
+        {
+            if (changes == null || (first && changes.Count != 0)) throw new InvalidDataException("Invalid initial zone changes.");
+            int previous = -1;
+            foreach (int[] change in changes)
+            {
+                if (change == null || change.Length != 4 || change[0] <= previous || change[0] >= map.Zone.Count) throw new InvalidDataException("Invalid zone patch order or ID.");
+                MapCodec.ValidateZone(new int[] { change[1], change[2], change[3] }, map.Biomes.Count);
+                previous = change[0];
+            }
+        }
+
+        public static int[][] LoadZones(string directory, MapMetadata map, int maximum)
         {
             if (maximum < 0) return null;
             ValidateMap(map);
-            int[] elevation = map.Elevation.ToArray();
+            int[][] zones = map.Zone.ToArray();
             bool header = false;
             int previous = -1;
             foreach (string line in File.ReadLines(AnnualPath(directory)))
@@ -2389,13 +2538,15 @@ namespace HistoryBox
                 int priorIndex = -1;
                 foreach (int[] change in observation.Map)
                 {
-                    if (change == null || change.Length != 2 || change[0] <= priorIndex || change[0] >= elevation.Length || change[1] < 0 || change[1] > 3) throw new InvalidDataException("Invalid annual terrain change.");
-                    elevation[change[0]] = change[1];
+                    if (change == null || change.Length != 4 || change[0] <= priorIndex || change[0] >= zones.Length) throw new InvalidDataException("Invalid annual zone change.");
+                    int[] value = new int[] { change[1], change[2], change[3] };
+                    MapCodec.ValidateZone(value, map.Biomes.Count);
+                    zones[change[0]] = value;
                     priorIndex = change[0];
                 }
             }
             if (!header || previous != maximum) throw new InvalidDataException("Incomplete annual map observations.");
-            return elevation;
+            return zones;
         }
 
         // Startup reads only the final complete line. Full traversal is reserved
@@ -2443,8 +2594,8 @@ namespace HistoryBox
             return year;
         }
 
-        // Birth-year start dates may precede first enrollment. For duplication,
-        // consult annual observations rather than treating birth as enrollment.
+        // Duplication retains characters actually recorded by the cutoff;
+        // neither birth dates nor uncertain recording boundaries imply an observation.
         public static HashSet<long> GetRecordedCharacters(string directory, int lastYear)
         {
             HashSet<long> ids = new HashSet<long>();
@@ -2477,6 +2628,7 @@ namespace HistoryBox
         [DataContract]
         private sealed class YearProbe
         {
+            [DataMember(Name = "map")] public List<int[]> Map { get; set; }
             [DataMember(Name = "world")] public YearValue World { get; set; }
         }
         [DataContract]
@@ -2590,11 +2742,24 @@ namespace HistoryBox
             CommitJournal journal = Deserialize<CommitJournal>(File.ReadAllText(Path.Combine(staging, "journal.json")));
             MetadataRecord overview = Deserialize<MetadataRecord>(File.ReadAllText(MetadataPath(staging)));
             if (journal == null || overview.World == null || journal.Year != overview.World.Year) throw new InvalidDataException("Invalid pending history commit.");
+            if (journal.Year >= 0) ValidateMap(overview.Map);
+            if (journal.Mode != "stream" && File.Exists(MetadataPath(directory)))
+            {
+                MapMetadata priorMap = Deserialize<MapProbe>(File.ReadAllText(MetadataPath(directory))).Map;
+                if (priorMap != null && priorMap.Width > 0)
+                {
+                    ValidateMap(priorMap);
+                    if (priorMap.Width != overview.Map.Width || priorMap.Height != overview.Map.Height || priorMap.Biomes.Count > overview.Map.Biomes.Count) throw new InvalidDataException("Map registry or dimensions changed.");
+                    for (int i = 0; i < priorMap.Biomes.Count; i++) if (priorMap.Biomes[i] != overview.Map.Biomes[i]) throw new InvalidDataException("Biome index identity changed.");
+                    for (int i = 0; i < priorMap.Zone.Count; i++) if (!MapCodec.Equal(priorMap.Zone[i], overview.Map.Zone[i])) throw new InvalidDataException("Map baseline changed.");
+                }
+            }
             string annual = AnnualPath(directory);
             if (journal.Mode == "stream")
             {
                 if (GetLastYear(staging) != journal.Year) throw new InvalidDataException("Pending stream year mismatch.");
                 using (StreamReader reader = File.OpenText(AnnualPath(staging))) if (!SameIdentity(Deserialize<AnnualHeader>(reader.ReadLine()), overview.World)) throw new InvalidDataException("Pending stream identity mismatch.");
+                if (journal.Year >= 0) LoadZones(staging, overview.Map, journal.Year);
                 Publish(AnnualPath(staging), annual);
             }
             else if (journal.Mode == "append" || journal.Mode == "metadata")
@@ -2606,6 +2771,7 @@ namespace HistoryBox
                     byte[] bytes = File.ReadAllBytes(Path.Combine(staging, "append.jsonl"));
                     YearProbe next = Deserialize<YearProbe>(Encoding.UTF8.GetString(bytes));
                     if (bytes.Length == 0 || bytes[bytes.Length - 1] != 10 || next.World == null || next.World.Year != journal.Year || journal.Year <= journal.PreviousYear) throw new InvalidDataException("Invalid pending annual line.");
+                    ValidateChanges(next.Map, overview.Map, journal.PreviousYear < 0);
                     using (FileStream stream = new FileStream(annual, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                     {
                         long suffix = stream.Length - journal.PreviousLength;

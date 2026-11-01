@@ -35,11 +35,12 @@ Open your world's folder inside the location below. Copy **overview.json** and *
 
 ## Explore
 
-Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files from the same recording, and choose **Open world**. Your files stay in your browser. Choose **Map** to watch terrain and territory change with the timeline. Drag to move around, scroll or pinch to zoom, and select territory to open its village or kingdom. The map’s Settings arrow toggles territory names. Entity browser remembers where you left off when you return.
+Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files together in the single file picker from the same recording, and choose **Open world**. Your files stay in your browser. Choose **Map** to watch terrain, biomes, structures, and territory change with the timeline. Drag to move around, scroll or pinch to zoom, and select territory to open its village or kingdom. Choose Terrain or Biome under Physical, and Villages or Kingdoms under Political. The Settings arrow toggles politics, structures, Legend, and Zoom separately. Territory names appear automatically as you zoom in. Zoom buttons sit at the top left; selected-zone details appear at the bottom right. Click a non-species legend color to customize it. Capital stars and other village markers use the village’s species color. Entity browser remembers where you left off when you return.
 
 ## Notes
 
-- Use files from the current recorder with the current Viewer. Older recording formats are not converted; keep them separately when beginning a new history.
+- Use files from the current recorder with the current Viewer. The current biome-and-structure map format needs a fresh history; preserve older paired files outside the active HistoryBox folder before recording the same world again.
+- **Age** is age at the selected year; **lifespan** covers birth to ending; **duration** covers recorded years. Characters keep an effective birth year based on their age when first recorded, including earlier artificial aging.
 - Recording starts when Activator is ON; earlier years cannot be recovered. **Duplicator ON** keeps a separate history when saving into another slot.
 - Downloaded this repository? Open its `index.html` in a modern browser to use the Viewer locally.
 - Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations may use another [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).
