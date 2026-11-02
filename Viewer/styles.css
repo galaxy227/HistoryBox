@@ -288,7 +288,7 @@ html { scroll-padding-bottom: calc(var(--timeline-height,0px) + 20px); }
 }
 .masthead, main { margin: 0px auto; }
 .loader { width: min(620px, 100%); }
-#entity-manager { max-width: 1440px; width: 100%; margin: auto; padding: 0px 20px 0; display: block; }
+#entity-manager { max-width: 1440px; width: 100%; margin: auto; padding: 0px 20px 13px; display: block; }
 #entity-manager .entity-tabs { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin: 0px; padding: 0px; border: 0px; }
 #entity-manager .entity-tabs a { flex:0 0 auto; white-space:nowrap; }
 .comparison-table { table-layout: fixed; }
@@ -462,6 +462,7 @@ body.map-open { overflow:hidden; height:100dvh; }
   .brand { font-size:1.2rem; }
   .mark { width:24px; height:24px; }
   #view-nav { padding:4px 12px; flex-wrap:nowrap; }
+  #entity-manager { padding-bottom:4px; }
   #view-nav a { padding:5px 12px; font-size:.85rem; }
   .nav-world { flex-basis:auto; }
   .context { padding:5px 12px; gap:6px; }
@@ -488,3 +489,17 @@ body.map-open { overflow:hidden; height:100dvh; }
 @media(max-width:480px){.map-legend{padding:6px;font-size:.7rem}.map-legend h3{font-size:.65rem;overflow-wrap:anywhere}.map-legend span{flex-direction:column;align-items:flex-start;gap:3px}.map-legend section>div{gap:8px}}
 
 @media(max-width:640px),(max-height:500px){.map-settings{padding:8px}.map-settings label+label{margin-top:7px}.map-settings input[type="checkbox"]{margin:0;flex-shrink:0}.map-selection{padding:4px 8px 8px}.map-selection-header{margin-right:-4px;margin-bottom:4px}.map-detail{margin-top:4px}.map-dismiss{width:28px;height:28px;min-height:28px;font-size:1.5rem}.map-selection,.map-settings{max-height:calc(50% - 16px)}}
+
+.alliance-participants { grid-template-columns:minmax(0,1fr); }
+.tooltip-row[hidden] { display:none; }
+.tooltip-more { margin-top:8px; color:var(--muted); }
+
+/* Loader actions share one width and rhythm; tabs finish the manager edge. */
+#preview-example { width:100%; min-height:46px; margin:0 0 12px; }
+#load-status { margin:12px 0 0; }
+#load-status:empty { display:none; }
+#entity-manager:has(.record-tabs) { padding-bottom:0; }
+
+.map-political-row { display:flex; gap:12px; }
+.map-political-row > span { flex-shrink:0; }
+.map-political-value { margin-left:auto; text-align:right; }

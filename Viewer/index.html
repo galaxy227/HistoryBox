@@ -32,11 +32,11 @@
   <p id="restore-status" class="restore-status" role="status">Opening history…</p>
   <section id="loader" class="loader" hidden>
     <form id="load-form" class="panel load-panel" novalidate>
-      <div class="load-heading"><svg class="load-emblem" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 7h24l8 8v26H8zM32 7v10h8M16 24h16M16 31h12"/></svg><div><p class="eyebrow">HistoryBox Viewer</p><h1>Load a world</h1></div></div><div class="load-files">
+      <div class="load-heading"><svg class="load-emblem" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 7h24l8 8v26H8zM32 7v10h8M16 24h16M16 31h12"/></svg><div><p class="eyebrow">HistoryBox Viewer</p><h1>Load a world</h1></div></div><button id="preview-example" type="button">Preview example world</button><div class="load-files">
       <label><span class="file-heading">History files <small>overview.json + annual.jsonl</small></span><input id="history-files" type="file" accept=".json,.jsonl,.ndjson,.txt" multiple required aria-label="Select overview.json and annual.jsonl together"></label>
       </div><button class="primary" id="load" type="submit">Open world</button>
-      <p id="load-status" role="status" aria-live="polite"></p>
       <button id="cancel-load" type="button" hidden>Return to current world</button>
+      <p id="load-status" role="status" aria-live="polite"></p>
     </form>
   </section>
   <main id="main" tabindex="-1" hidden></main>

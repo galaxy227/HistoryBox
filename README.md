@@ -1,47 +1,62 @@
 # Welcome to HistoryBox
 
-Record your WorldBox world's history, then explore its people, kingdoms, villages, wars, alliances, and changing map in your browser.
+Record your [WorldBox](https://www.superworldbox.com/) world’s history, then explore it in the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/).
 
 ## Install
 
-1. Download your computer's archive from [Releases](https://github.com/galaxy227/HistoryBox/releases): **HistoryBox-Windows.zip**, **HistoryBox-macOS.zip**, or **HistoryBox-Linux.zip**. Extract it to find `HistoryBox.dll`.
-2. Close WorldBox. In Steam, right-click **WorldBox → Manage → Browse local files** to open the game folder. For a non-Steam copy, open its installation folder.
-3. Copy `HistoryBox.dll` into the folder for your computer:
+1. Download **HistoryBox-v1.0.0.zip** from [Releases](https://github.com/galaxy227/HistoryBox/releases). Extract the compressed folder to find `HistoryBox.dll`.
+2. Copy `HistoryBox.dll` into the following path, relative to your WorldBox installation directory:
 
-   | Computer | Where to place the file |
+   | Computer | File path |
    | --- | --- |
-   | Windows | Open `worldbox_Data`, then `StreamingAssets`, then `mods`. |
-   | macOS | Right-click `worldbox.app` → **Show Package Contents**, then open `Contents/Resources/Data/StreamingAssets/mods`. |
-   | Linux | Open `worldbox_Data`, then `StreamingAssets`, then `mods`. |
+   | Windows | `worldbox_Data/StreamingAssets/mods/` |
+   | macOS | `worldbox.app/Contents/Resources/Data/StreamingAssets/mods/` |
+   | Linux | `worldbox_Data/StreamingAssets/mods/` |
 
-   Use the existing `mods` folder, keeping its capitalization; create it if absent.
-4. Open WorldBox, enable **Experimental Mode** in Settings, then restart the game. These steps apply to all three platforms.
+   Be sure to use the existing `mods` folder, or if not already present, create a new `mods` folder preserving the expected capitalization.
+3. Start WorldBox, enable **Experimental Mode** in Settings, then restart the game. These steps apply to all three platforms.
 
-## Record
+## Record Your History
 
-Open your world and switch **Activator ON** in the top-right HistoryBox panel. Play normally. Switch it **OFF** before copying your history files.
+Open your world and you will see two buttons in the top-right HistoryBox panel, `Activator` and `Duplicator`.
 
-If an **ERROR** panel appears, its last-recorded year shows the latest successful recording. Recording keeps retrying; you can dismiss the panel, and another error will bring it back.
+### Activator
+
+`Activator` controls when HistoryBox records your world's history:
+
+**Activator ON:** As you continue to play normally, each completed year will be automatically recorded once the next year begins.
+
+**Activator OFF:** No history will be recorded. HistoryBox will simply omit unrecorded gaps in history.
+
+### Duplicator
+
+Each HistoryBox recording is associated with its respective WorldBox save slot. With **Activator ON**, `Duplicator` controls what happens when you save your world to a different slot:
+
+- **Duplicator ON:** Copies the existing HistoryBox output to a new folder for the new save slot, preserving the original history while continuing to record independently of your original world. Think of duplicating as starting an alternate timeline of your current world in a new save slot.
+- **Duplicator OFF:** Continues recording to the original HistoryBox output without creating a copy. If you later reopen your world from the new save slot and start recording, HistoryBox will create a new output without the original history.
+
+Saving to the same save slot always continues outputting to the current HistoryBox folder. Your world's first save automatically associates its HistoryBox recording to that slot, regardless of `Duplicator`.
 
 ## Find Your History
 
-Open your world's folder inside the location below. Copy **overview.json** and **annual.jsonl** together from that same folder.
+HistoryBox saves each world's history in a separate folder inside the following directory:
 
-| Computer | How to open the history location |
+| Computer | Folder path |
 | --- | --- |
-| Windows | Press **Win+R**, paste `%USERPROFILE%\AppData\LocalLow\mkarpenko\WorldBox\HistoryBox`, then press Enter. |
-| macOS | In Finder, choose **Go → Go to Folder**, then enter `~/Library/Application Support/mkarpenko/WorldBox/HistoryBox`. |
-| Linux | In your file manager, press **Ctrl+L** and enter `~/.config/unity3d/mkarpenko/WorldBox/HistoryBox`. |
+| Windows | `%USERPROFILE%\AppData\LocalLow\mkarpenko\WorldBox\HistoryBox\` |
+| macOS | `~/Library/Application Support/mkarpenko/WorldBox/HistoryBox/` |
+| Linux | `~/.config/unity3d/mkarpenko/WorldBox/HistoryBox/` |
 
-## Explore
+Open your world's folder within this directory, where you will find both `overview.json` and `annual.jsonl` files to view your history.
 
-Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), select both files together in the single file picker from the same recording, and choose **Open world**. Your files stay in your browser. Choose **Map** to watch terrain, biomes, structures, and territory change with the timeline. Drag to move around, scroll or pinch to zoom, and select territory to open its village or kingdom. Choose Terrain or Biome under Physical, and Villages or Kingdoms under Political. The Settings arrow toggles politics, structures, Legend, and Zoom separately. Territory names appear automatically as you zoom in. Zoom buttons sit at the top left; selected-zone details appear at the bottom right. Click a non-species legend color to customize it. Capital stars and other village markers use the village’s species color. Entity browser remembers where you left off when you return.
+Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations may use another [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).
+
+## Explore Your History
+
+Visit the [HistoryBox Viewer](https://galaxy227.github.io/HistoryBox/), upload your **overview.json** and **annual.jsonl** files together, then explore your world! The World Overview gives a collection of global data, the Entity Browser lets you dive into details, and the Map visualizes it all combined.
+
+You may also download this repository and open `index.html` in a modern browser to use the Viewer locally.
 
 ## Notes
 
-- Use files from the current recorder with the current Viewer. The current biome-and-structure map format needs a fresh history; preserve older paired files outside the active HistoryBox folder before recording the same world again.
-- **Age** is age at the selected year; **lifespan** covers birth to ending; **duration** covers recorded years. Characters keep an effective birth year based on their age when first recorded, including earlier artificial aging.
-- Recording starts when Activator is ON; earlier years cannot be recovered. **Duplicator ON** keeps a separate history when saving into another slot.
-- Downloaded this repository? Open its `index.html` in a modern browser to use the Viewer locally.
-- Linux may use `$XDG_CONFIG_HOME` instead of `~/.config`; older macOS installations may use another [save-data location](https://docs.unity3d.com/ScriptReference/Application-persistentDataPath.html).
-- More detail: [recording and installation](Box/README.md) · [using the Viewer](Viewer/README.md).
+- HistoryBox is compatible with WorldBox 0.51.2
